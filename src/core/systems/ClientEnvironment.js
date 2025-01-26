@@ -81,13 +81,16 @@ export class ClientEnvironment extends System {
     this.world.client.settings.on('change', this.onSettingsChange)
     this.world.graphics.on('resize', this.onViewportResize)
 
+    // Remove the default environment and skybox setup
+    // this.updateSky() // Commented out to remove skybox
+
     // Add background elements
     this.addStars()
     this.addNebulae()
     this.addPlanets()
     this.addMatrixRain()
     this.addSpaceObjects()
-    this.addUFOOrbs() // Add this line to create the UFOs
+    this.addUFOOrbs()
 
     // Check admin status before initializing flight
     if (this.world.client?.isAdmin) {
@@ -267,25 +270,14 @@ export class ClientEnvironment extends System {
 
                 case 'following':
                     // Smooth orbital movement with curious behavior
-                    orb.offsetTransition += delta * 0.3;
+                    orb.offsetTransition += delta * 0.3; // Slow transition between positions
                     if (orb.offsetTransition >= 1) {
                         orb.lastOffset = orb.nextOffset;
-                        if (orb.orbitHead) {
-                            // Create tight circular orbit around player's head
-                            const angle = orb.stateTime * orb.orbitSpeed;
-                            orb.nextOffset = new THREE.Vector3(
-                                Math.cos(angle) * orb.orbitRadius,
-                                180 + Math.sin(angle * 0.5) * 20, // Head height + slight up/down
-                                Math.sin(angle) * orb.orbitRadius
-                            );
-                        } else {
-                            // Normal wider orbits
-                            orb.nextOffset = new THREE.Vector3(
-                                THREE.MathUtils.randFloatSpread(200),
-                                THREE.MathUtils.randFloatSpread(200),
-                                THREE.MathUtils.randFloatSpread(200)
-                            );
-                        }
+                        orb.nextOffset = new THREE.Vector3(
+                            THREE.MathUtils.randFloatSpread(200),
+                            THREE.MathUtils.randFloatSpread(200),
+                            THREE.MathUtils.randFloatSpread(200)
+                        );
                         orb.offsetTransition = 0;
                     }
 
@@ -297,12 +289,11 @@ export class ClientEnvironment extends System {
                         smoothStep(orb.offsetTransition)
                     );
                     
-                    // Add gentle wobble (reduced for head orbits)
-                    const wobbleAmount = orb.orbitHead ? 3 : 10;
+                    // Add gentle wobble
                     const wobble = new THREE.Vector3(
-                        Math.sin(orb.stateTime * 2.0) * wobbleAmount,
-                        Math.cos(orb.stateTime * 1.7) * wobbleAmount,
-                        Math.sin(orb.stateTime * 1.5) * wobbleAmount
+                        Math.sin(orb.stateTime * 2.0) * 10,
+                        Math.cos(orb.stateTime * 1.7) * 10,
+                        Math.sin(orb.stateTime * 1.5) * 10
                     );
                     currentOffset.add(wobble);
 
@@ -310,12 +301,12 @@ export class ClientEnvironment extends System {
                     const followTarget = new THREE.Vector3().copy(playerPosition).add(currentOffset);
                     const followDir = followTarget.clone().sub(orb.mesh.position).normalize();
                     const followDist = orb.mesh.position.distanceTo(followTarget);
-                    const followSpeed = orb.speed * (orb.orbitHead ? 0.8 : 0.5) * Math.min(1.0, followDist / 100);
+                    const followSpeed = orb.speed * 0.5 * Math.min(1.0, followDist / 100);
                     
                     orb.mesh.position.addScaledVector(followDir, followSpeed * delta);
                     
                     // Randomly decide to leave after some time, with smooth transition
-                    if (orb.stateTime > (orb.orbitHead ? 15 : 10) && Math.random() < 0.005) {
+                    if (orb.stateTime > 10 && Math.random() < 0.005) {
                         orb.state = 'leaving';
                         orb.stateTime = 0;
                     }
@@ -355,9 +346,6 @@ export class ClientEnvironment extends System {
                 orb.stateTime = 0;
                 orb.leaveTarget = null;
             }
-
-            // Add smooth rotation
-            orb.mesh.rotation.z += orb.mesh.userData.rotationSpeed * delta;
         });
     }
   }
@@ -607,11 +595,11 @@ export class ClientEnvironment extends System {
                     vec3 f = fract(p);
                     f = f * f * (3.0 - 2.0 * f);
                     float n = mix(mix(mix(dot(random3(i), f),
-                                        dot(random3(i + vec3(1,0,0)), f - vec3(1,0,0)),
+                                        dot(random3(i + vec3(1,0,0)), f - vec3(1,0,0)),f.x),
                                     mix(dot(random3(i + vec3(0,1,0)), f - vec3(0,1,0)),
                                         dot(random3(i + vec3(1,1,0)), f - vec3(1,1,0)),f.x),
                                 mix(mix(dot(random3(i + vec3(0,0,1)), f - vec3(0,0,1)),
-                                    mix(dot(random3(i + vec3(1,0,1)), f - vec3(1,0,1)),f.x),
+                                        dot(random3(i + vec3(1,0,1)), f - vec3(1,0,1)),f.x),
                                     mix(dot(random3(i + vec3(0,1,1)), f - vec3(0,1,1)),
                                         dot(random3(i + vec3(1,1,1)), f - vec3(1,1,1)),f.y),f.z);
                     return n * 0.5 + 0.5;
@@ -1012,9 +1000,9 @@ export class ClientEnvironment extends System {
                         dot(p,vec3(127.1,311.7,74.7)),
                         dot(p,vec3(269.5,183.3,246.1)),
                         dot(p,vec3(113.5,271.9,124.6))))*43758.5453123);
-                }
+          }
 
-                void main() {
+          void main() {
                     vec4 texColor;
                     if (vCharType > 0.5) {
                         texColor = texture2D(texture1, gl_PointCoord);
@@ -1033,10 +1021,10 @@ export class ClientEnvironment extends System {
                     alpha *= glow;
                     
                     gl_FragColor = vec4(finalColor, alpha);
-                }
-            `,
-            transparent: true,
-            blending: THREE.AdditiveBlending,
+          }
+        `,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
             depthWrite: false,
         });
 
@@ -1423,7 +1411,7 @@ export class ClientEnvironment extends System {
                     dot(p,vec3(269.5,183.3,246.1)),
                     dot(p,vec3(113.5,271.9,124.6))))*43758.5453123);
             }
-
+            
             void main() {
                 // Create pulsing glow effect
                 float pulse = sin(time * 2.0) * 0.5 + 0.5;
@@ -1431,29 +1419,22 @@ export class ClientEnvironment extends System {
                 // Create energy field effect
                 float energyRings = abs(sin(length(vPosition) * 10.0 - time * 3.0));
                 
-                // Create electric effect along edges
-                float edge = pow(1.0 - abs(dot(vNormal, vec3(0.0, 0.0, 1.0))), 3.0);
-                
                 // Create scanning line effect
                 float scanLine = smoothstep(0.0, 0.1, abs(sin(vPosition.y * 20.0 + time * 5.0)));
                 
                 // Add noise to make it more ethereal
                 vec3 noise = random3(vPosition + vec3(time * 0.1));
                 
-                // Electric arcs effect
-                float arcs = step(0.98, sin(vPosition.x * 50.0 + time * 10.0) * sin(vPosition.y * 50.0 - time * 8.0));
-                
                 // Combine effects
                 vec3 finalColor = mix(color, pulseColor, pulse * energyRings);
                 finalColor += scanLine * 0.5;
                 finalColor += noise * 0.1;
-                finalColor += edge * color * 2.0;
-                finalColor += arcs * pulseColor * 2.0;
                 
-                // Enhanced glow
-                float glow = pulse * 0.5 + edge * 0.5 + arcs;
+                // Add rim lighting
+                float rim = pow(1.0 - abs(dot(vNormal, vec3(0.0, 0.0, 1.0))), 2.0);
+                finalColor += rim * color;
                 
-                gl_FragColor = vec4(finalColor, 0.8 * (glow + 0.2));
+                gl_FragColor = vec4(finalColor, 0.8);
             }
         `,
         transparent: true,
@@ -1462,111 +1443,18 @@ export class ClientEnvironment extends System {
     });
 
     const createUFOOrb = () => {
-        // Create lightning bolt shape based on ⚡ emoji
-        const shape = new THREE.Shape();
+        // Reduced size from 7.5 to about 2 (75% smaller again)
+        const geometry = new THREE.SphereGeometry(1.875, 32, 32);
+        const material = orbMaterial.clone();
         
-        // Define the lightning bolt path (zig-zag)
-        shape.moveTo(0, 0.5);      // Top point
-        shape.lineTo(0.2, 0.1);    // Right zag
-        shape.lineTo(0, 0);        // Middle point
-        shape.lineTo(-0.2, -0.1);  // Left zag
-        shape.lineTo(0, -0.5);     // Bottom point
-        shape.lineTo(0.1, -0.1);   // Right return
-        shape.lineTo(0, 0);        // Back to middle
-        shape.lineTo(-0.1, 0.1);   // Left return
-        shape.lineTo(0, 0.5);      // Back to top
-
-        // Create geometry with some depth
-        const extrudeSettings = {
-            depth: 0.05,            // Thinner
-            bevelEnabled: true,
-            bevelThickness: 0.02,   // Smaller bevel
-            bevelSize: 0.02,
-            bevelSegments: 3
-        };
-        
-        const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
-        
-        // Scale the geometry
-        const scale = 1.875;
-        geometry.scale(scale, scale, scale);
-        
-        // Compute vertex normals for proper lighting
-        geometry.computeVertexNormals();
-
-        // Define Hyperfy theme colors
-        const themeColors = [
-            { base: '#ff1b8d', pulse: '#ff8dc7' }, // Hot pink
-            { base: '#8b2fe6', pulse: '#c48dff' }, // Purple
-            { base: '#0e9fff', pulse: '#8ddfff' }  // Blue
-        ];
-        
-        // Pick a random theme color
-        const colorScheme = themeColors[Math.floor(Math.random() * themeColors.length)];
-
-        const material = new THREE.ShaderMaterial({
-            uniforms: {
-                time: { value: 0 },
-                color: { value: new THREE.Color(colorScheme.base).multiplyScalar(3.0) },    // Much brighter base
-                pulseColor: { value: new THREE.Color(colorScheme.pulse).multiplyScalar(2.0) } // Brighter pulse
-            },
-            vertexShader: `
-                varying vec3 vPosition;
-                varying vec3 vNormal;
-                varying vec2 vUv;
-                
-                void main() {
-                    vPosition = position;
-                    vNormal = normalize(normalMatrix * normal);
-                    vUv = uv;
-                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-                }
-            `,
-            fragmentShader: `
-                uniform float time;
-                uniform vec3 color;
-                uniform vec3 pulseColor;
-                varying vec3 vPosition;
-                varying vec3 vNormal;
-                varying vec2 vUv;
-                
-                void main() {
-                    // Create pulsing glow effect
-                    float pulse = sin(time * 3.0) * 0.5 + 0.5;
-                    
-                    // Edge glow
-                    float edge = pow(1.0 - abs(dot(vNormal, vec3(0.0, 0.0, 1.0))), 3.0);
-                    
-                    // Electric effect
-                    float electric = step(0.97, sin(vPosition.x * 30.0 + time * 15.0));
-                    
-                    // Energy field
-                    float energy = abs(sin(length(vPosition) * 15.0 - time * 4.0));
-                    
-                    // Combine effects with increased intensity
-                    vec3 finalColor = mix(color, pulseColor, pulse * energy);
-                    finalColor += edge * color * 4.0; // Doubled edge glow
-                    finalColor += electric * pulseColor * 2.0; // Doubled electric effect
-                    
-                    // Enhanced glow with electric shimmer
-                    float glow = pulse * 0.8 + edge * 1.0 + electric * 0.7; // Increased all glow components
-                    float alpha = 0.95 * (glow + 0.4); // Increased base alpha
-                    
-                    gl_FragColor = vec4(finalColor, alpha);
-                }
-            `,
-            transparent: true,
-            blending: THREE.AdditiveBlending,
-            side: THREE.DoubleSide,
-            depthWrite: false
-        });
+        // Randomize colors
+        const hue = Math.random();
+        material.uniforms.color.value.setHSL(hue, 1, 0.5);
+        material.uniforms.pulseColor.value.setHSL((hue + 0.5) % 1, 1, 0.5);
 
         const orb = new THREE.Mesh(geometry, material);
         
-        // Add rotation animation - slower rotation
-        orb.userData.rotationSpeed = (Math.random() - 0.5) * 1.5;
-        
-        // Random starting position far from player in a tighter group
+        // Random starting position far from player
         const theta = Math.random() * Math.PI * 2;
         const phi = Math.acos(2 * Math.random() - 1);
         const r = 2000 + Math.random() * 1000;
@@ -1579,44 +1467,41 @@ export class ClientEnvironment extends System {
 
         this.ufoOrbs.push({
             mesh: orb,
-            state: 'approaching',
+            state: 'approaching', // approaching, following, leaving
             stateTime: 0,
             speed: 100 + Math.random() * 200,
             offset: new THREE.Vector3(
-                THREE.MathUtils.randFloatSpread(100),
-                THREE.MathUtils.randFloatSpread(100),
-                THREE.MathUtils.randFloatSpread(100)
+                THREE.MathUtils.randFloatSpread(200),
+                THREE.MathUtils.randFloatSpread(200),
+                THREE.MathUtils.randFloatSpread(200)
             ),
             rotationAxis: new THREE.Vector3(
                 Math.random() - 0.5,
                 Math.random() - 0.5,
                 Math.random() - 0.5
-            ).normalize(),
-            groupId: Date.now(),
-            orbitHead: Math.random() > 0.7, // 30% chance to orbit head
-            orbitRadius: 20 + Math.random() * 30, // Closer orbit radius
-            orbitSpeed: (Math.random() * 2 + 1) * Math.PI // Random orbit speed
+            ).normalize()
         });
 
         this.world.stage.scene.add(orb);
     };
 
-    // Create initial UFO orbs in groups of 4
-    for (let i = 0; i < 2; i++) { // 2 groups of 4
-        const groupTime = Date.now();
-        for (let j = 0; j < 4; j++) {
+    // Create initial UFO orbs as a group
+    const createOrbGroup = () => {
+        const groupSize = 2 + Math.floor(Math.random() * 4); // 2-5 orbs per group
+        for (let i = 0; i < groupSize; i++) {
             createUFOOrb();
         }
-    }
+    };
 
-    // Periodically create new UFO orbs in groups of 4
+    // Create initial group
+    createOrbGroup();
+
+    // Periodically create new UFO orb groups
     this.ufoInterval = setInterval(() => {
-        if (this.ufoOrbs.length < 12 && Math.random() > 0.7) { // Increased max count
-            for (let i = 0; i < 4; i++) {
-                createUFOOrb();
-            }
+        if (this.ufoOrbs.length < 12 && Math.random() > 0.7) { // Increased max orbs
+            createOrbGroup();
         }
-    }, 5000);
+    }, 8000); // Slightly longer interval for larger groups
   }
 
   clearSphereTest(x, y, z, radius = 200) {
