@@ -72,6 +72,7 @@ export class ClientEnvironment extends System {
     this.nebulae = []
     this.spaceObjects = []
     this.ufoOrbs = []
+    this.sun = null;
   }
 
   async start() {
@@ -91,6 +92,7 @@ export class ClientEnvironment extends System {
     this.addMatrixRain()
     this.addSpaceObjects()
     this.addUFOOrbs()
+    this.addSun()
 
     // Check admin status before initializing flight
     if (this.world.client?.isAdmin) {
@@ -348,6 +350,14 @@ export class ClientEnvironment extends System {
             }
         });
     }
+
+    // Update sun
+    if (this.sun) {
+        this.sun.material.uniforms.time.value += delta * 0.5;
+        // Subtle movement
+        this.sun.rotation.y += delta * 0.02;
+        this.sun.rotation.x += delta * 0.01;
+    }
   }
 
   buildCSM() {
@@ -598,7 +608,7 @@ export class ClientEnvironment extends System {
                                         dot(random3(i + vec3(1,0,0)), f - vec3(1,0,0)),f.x),
                                     mix(dot(random3(i + vec3(0,1,0)), f - vec3(0,1,0)),
                                         dot(random3(i + vec3(1,1,0)), f - vec3(1,1,0)),f.x),
-                                mix(mix(dot(random3(i + vec3(0,0,1)), f - vec3(0,0,1)),
+                                    mix(mix(dot(random3(i + vec3(0,0,1)), f - vec3(0,0,1)),
                                         dot(random3(i + vec3(1,0,1)), f - vec3(1,0,1)),f.x),
                                     mix(dot(random3(i + vec3(0,1,1)), f - vec3(0,1,1)),
                                         dot(random3(i + vec3(1,1,1)), f - vec3(1,1,1)),f.y),f.z);
@@ -791,6 +801,11 @@ export class ClientEnvironment extends System {
     this.ufoOrbs.forEach(orb => {
         this.world.stage.scene.remove(orb.mesh);
     });
+    if (this.sun) {
+        this.world.stage.scene.remove(this.sun);
+        this.sun.geometry.dispose();
+        this.sun.material.dispose();
+    }
   }
 
   addPlanets() {
@@ -1502,6 +1517,100 @@ export class ClientEnvironment extends System {
             createOrbGroup();
         }
     }, 8000); // Slightly longer interval for larger groups
+  }
+
+  addSun() {
+    const sunMaterial = new THREE.ShaderMaterial({
+        uniforms: {
+            time: { value: 0 },
+            baseColor: { value: new THREE.Color('#ff3300').multiplyScalar(3.0) },  // Intense orange-red
+            coronaColor: { value: new THREE.Color('#ff1b8d').multiplyScalar(2.5) } // Cyberpunk pink
+        },
+        vertexShader: `
+            varying vec3 vNormal;
+            varying vec3 vPosition;
+            
+            void main() {
+                vNormal = normalize(normalMatrix * normal);
+                vPosition = position;
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+            }
+        `,
+        fragmentShader: `
+            uniform float time;
+            uniform vec3 baseColor;
+            uniform vec3 coronaColor;
+            varying vec3 vNormal;
+            varying vec3 vPosition;
+
+            // Noise function for turbulent flames
+            float noise(vec3 p) {
+                vec3 i = floor(p);
+                vec3 f = fract(p);
+                f = f * f * (3.0 - 2.0 * f);
+                
+                float n = i.x + i.y * 157.0 + 113.0 * i.z;
+                vec4 v1 = fract(sin(vec4(n + 0.0, n + 1.0, n + 157.0, n + 158.0)) * 43758.5453123);
+                vec4 v2 = fract(sin(vec4(n + 113.0, n + 114.0, n + 270.0, n + 271.0)) * 43758.5453123);
+                
+                vec4 x1 = mix(v1, v2, f.z);
+                vec2 x2 = mix(x1.xy, x1.zw, f.y);
+                return mix(x2.x, x2.y, f.x);
+            }
+
+            void main() {
+                // Create turbulent fire effect
+                float n = noise(vPosition * 0.3 + time * 0.5);
+                float n2 = noise(vPosition * 0.9 + time * 0.7);
+                float n3 = noise(vPosition * 1.4 + time * 0.3);
+                
+                // Layer multiple noise for more detail
+                float turbulence = n * 0.5 + n2 * 0.3 + n3 * 0.2;
+                
+                // Create pulsing core
+                float pulse = sin(time * 1.5) * 0.5 + 0.5;
+                
+                // Enhanced corona effect
+                float corona = pow(1.0 - abs(dot(vNormal, vec3(0.0, 0.0, 1.0))), 3.0);
+                
+                // Create energy waves
+                float energyWaves = abs(sin(length(vPosition) * 0.2 - time * 2.0));
+                
+                // Combine all effects
+                vec3 finalColor = mix(baseColor, coronaColor, corona * (0.8 + pulse * 0.2));
+                finalColor *= 1.0 + turbulence * 0.5;
+                finalColor += coronaColor * energyWaves * 0.3;
+                finalColor *= 1.0 + pulse * 0.2;
+                
+                // Add intense glow at edges
+                float glow = pow(corona, 2.0) * 3.0;
+                finalColor += coronaColor * glow;
+                
+                // Add extra brightness to the core
+                float core = 1.0 - corona;
+                finalColor += baseColor * core * 2.0;
+                
+                gl_FragColor = vec4(finalColor, 1.0);
+            }
+        `,
+        side: THREE.FrontSide,
+        transparent: true,
+        blending: THREE.AdditiveBlending
+    });
+
+    // Create large sun sphere with more segments for smoother appearance
+    const geometry = new THREE.SphereGeometry(1200, 128, 128);
+    this.sun = new THREE.Mesh(geometry, sunMaterial);
+    
+    // Position sun in the far distance but visible
+    this.sun.position.set(-12000, 3000, -15000);
+    
+    // Add a point light to create actual lighting from the sun
+    const sunLight = new THREE.PointLight(0xff3300, 2, 30000);
+    sunLight.position.copy(this.sun.position);
+    this.sun.add(sunLight);
+    
+    this.world.stage.scene.add(this.sun);
   }
 
   clearSphereTest(x, y, z, radius = 200) {
