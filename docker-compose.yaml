@@ -35,3 +35,7 @@ services:
       retries: 3
 
       start_period: 40s
+    labels:
+      - coolify.managed=true
+      - coolify.applicationId=5
+      - coolify.type=application
