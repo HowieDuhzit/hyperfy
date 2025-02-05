@@ -1,4 +1,4 @@
-FROM node:22 AS build
+FROM node:20-alpine AS build
 
 # Set the working directory
 WORKDIR /app
@@ -13,10 +13,10 @@ RUN npm install
 COPY . .
 
 # Build the application
-RUN npm run build; exit 0
+RUN npm run build
 
 # Stage 2: Run
-FROM node:22
+FROM node:20-alpine
 
 # Set the working directory
 WORKDIR /app
