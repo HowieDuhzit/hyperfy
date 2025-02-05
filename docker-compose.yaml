@@ -31,12 +31,6 @@ services:
       - type: bind
         source: .env
         target: /app/.env
-    healthcheck:
-      test: ["CMD", "wget", "--spider", "http://localhost:3000"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
     labels:
       - coolify.managed=true
       - coolify.applicationId=5
