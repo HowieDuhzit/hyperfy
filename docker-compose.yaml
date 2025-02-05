@@ -21,19 +21,17 @@ services:
       - PUBLIC_ASSETS_URL=${PUBLIC_ASSETS_URL:-${SERVICE_FQDN_HYPERFY}/assets}
     volumes:
       - type: bind
-        source: /nvme/hyperfy/
-        target: /app/$WORLD
+        source: /nvme/hyperfy/${WORLD}
+        target: /app/${WORLD}
         is_directory: true
-      - type: bind  
+      - type: bind
         source: .env
         target: /app/.env
-        content: |
     healthcheck:
       test: ["CMD", "wget", "--spider", "http://localhost:3000"]
       interval: 30s
       timeout: 10s
       retries: 3
-
       start_period: 40s
     labels:
       - coolify.managed=true
