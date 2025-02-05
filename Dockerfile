@@ -3,11 +3,14 @@ FROM node:20-alpine AS build
 # Set the working directory
 WORKDIR /app
 
-# Copy package.json and package-lock.json
-COPY package.json package-lock.json ./
+# Install build dependencies
+RUN apk add --no-cache python3 make g++
+
+# Copy package files
+COPY package*.json ./
 
 # Install dependencies
-RUN npm install
+RUN npm ci
 
 # Copy the rest of the application code
 COPY . .
@@ -21,15 +24,18 @@ FROM node:20-alpine
 # Set the working directory
 WORKDIR /app
 
+# Install runtime dependencies
+RUN apk add --no-cache wget
+
 # Copy the build folder from the previous stage
 COPY --from=build /app/build ./build
 COPY ./src ./src
 
-# Copy package.json and package-lock.json
-COPY package.json package-lock.json ./
+# Copy package files
+COPY package*.json ./
 
 # Install only production dependencies
-RUN npm install --only=production
+RUN npm ci --only=production
 
 # Expose the port the app runs on
 EXPOSE 3000
