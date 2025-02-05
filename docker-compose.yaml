@@ -29,8 +29,9 @@ services:
         target: /app/${WORLD}
         is_directory: true
       - type: bind
-        source: .env
+        source: ./.env
         target: /app/.env
+        content: |
     labels:
       - coolify.managed=true
       - coolify.applicationId=5
