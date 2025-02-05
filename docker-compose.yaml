@@ -5,11 +5,14 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        - NODE_ENV=production
     container_name: hyperfy
     restart: unless-stopped
     ports:
       - "${PORT:-3000}:3000"
     environment:
+      - NODE_ENV=production
       - ADMIN_CODE=${ADMIN_CODE:-admin}
       - JWT_SECRET=${JWT_SECRET:-hyper}
       - PORT=${PORT:-3000}
