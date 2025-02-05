@@ -9,8 +9,6 @@ services:
         - NODE_ENV=production
     container_name: hyperfy
     restart: unless-stopped
-    ports:
-      - "${PORT}:3000"
     environment:
       - NODE_ENV=production
       - ADMIN_CODE=${ADMIN_CODE:-admin}
