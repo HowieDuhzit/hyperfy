@@ -23,8 +23,8 @@ services:
       - PUBLIC_ASSETS_URL=${PUBLIC_ASSETS_URL:-${SERVICE_FQDN_HYPERFY}/assets}
     volumes:
       - type: bind
-        source: /nvme/hyperfy/${WORLD}
-        target: /app/${WORLD}
+        source: /nvme/hyperfy/world
+        target: /app/world
         is_directory: true
       - type: bind
         source: ./.env
