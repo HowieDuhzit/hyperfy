@@ -13,6 +13,8 @@ import {
   PackageCheckIcon,
   ShuffleIcon,
   XIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
 } from 'lucide-react'
 
 import { hashFile } from '../../core/utils-client'
@@ -150,6 +152,9 @@ export function AppPane({ world, app }) {
             <span>Edit</span>
           </div>
         )}
+        <div className={cls('apane-head-tab', { selected: tab === 'inspector' })} onClick={() => setTab('inspector')}>
+          <span>Inspector</span>
+        </div>
         <div className='apane-head-gap' />
         <div className='apane-head-close' onClick={() => world.emit('inspect', null)}>
           <XIcon size={20} />
@@ -165,6 +170,7 @@ export function AppPane({ world, app }) {
         </>
       )}
       {tab === 'edit' && <AppPaneEdit world={world} app={app} blueprint={blueprint} />}
+      {tab === 'inspector' && <AppPaneInspector app={app} />}
     </div>
   )
 }
@@ -929,4 +935,85 @@ function resolveURL(url) {
     return `https:${url}`
   }
   return `https://${url}`
+}
+
+function AppPaneInspector({ app }) {
+  const [expanded, setExpanded] = useState({})
+
+  const toggleNode = id => {
+    setExpanded(prev => ({
+      ...prev,
+      [id]: !prev[id]
+    }))
+  }
+
+  const renderNode = (node, depth = 0) => {
+    const hasChildren = node.children && node.children.length > 0
+    const isExpanded = expanded[node.id]
+
+    return (
+      <div key={node.id}>
+        <div 
+          className='inspector-node'
+          style={{ paddingLeft: `${depth * 20}px` }}
+          onClick={() => hasChildren && toggleNode(node.id)}
+        >
+          {hasChildren && (
+            <div className='inspector-node-arrow'>
+              {isExpanded ? <ChevronDownIcon size={16} /> : <ChevronRightIcon size={16} />}
+            </div>
+          )}
+          <div className='inspector-node-name'>{node.id || 'unnamed'}</div>
+          <div className='inspector-node-type'>{node.type}</div>
+        </div>
+        {hasChildren && isExpanded && node.children.map(child => renderNode(child, depth + 1))}
+      </div>
+    )
+  }
+
+  return (
+    <div 
+      className='inspector noscrollbar'
+      css={css`
+        flex: 1;
+        padding: 10px 0;
+        max-height: 500px;
+        overflow-y: auto;
+        
+        .inspector-node {
+          display: flex;
+          align-items: center;
+          padding: 4px 10px;
+          cursor: pointer;
+          
+          &:hover {
+            background: rgba(255, 255, 255, 0.05);
+          }
+          
+          &-arrow {
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 4px;
+            color: #666;
+          }
+          
+          &-name {
+            flex: 1;
+            font-size: 14px;
+          }
+          
+          &-type {
+            font-size: 12px;
+            color: #666;
+            margin-left: 8px;
+          }
+        }
+      `}
+    >
+      {renderNode(app)}
+    </div>
+  )
 }
