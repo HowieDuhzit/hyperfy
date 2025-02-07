@@ -14,9 +14,10 @@ import {
   ShuffleIcon,
   XIcon,
   LayersIcon,
+  ShieldIcon,
   CubeIcon,
-  AnchorIcon,
-  FolderIcon,
+  SunIcon,
+  CameraIcon,
 } from 'lucide-react'
 
 import { hashFile } from '../../core/utils-client'
@@ -433,6 +434,31 @@ function AppPaneHierarchy({ app }) {
     }
   }, [rootNode])
 
+  // Helper function to get appropriate icon based on node type
+  const getNodeIcon = (node) => {
+    if (!node) return <LayersIcon size={14} />
+    
+    // Check node properties to determine type
+    if (node.isRigidBody || node.type === 'RigidBody') {
+      return <BoxIcon size={14} />
+    }
+    if (node.isCollider || node.type === 'Collider') {
+      return <ShieldIcon size={14} />  
+    }
+    if (node.isMesh || node.type === 'Mesh') {
+      return <CubeIcon size={14} />
+    }
+    if (node.isLight || node.type === 'Light') {
+      return <SunIcon size={14} />
+    }
+    if (node.isCamera || node.type === 'Camera') {
+      return <CameraIcon size={14} />
+    }
+    
+    // Default icon for other types
+    return <LayersIcon size={14} />
+  }
+
   // Helper function to safely get vector string
   const getVectorString = (vec) => {
     if (!vec || typeof vec.x !== 'number') return null
@@ -522,7 +548,8 @@ function AppPaneHierarchy({ app }) {
     >
       <div className='ahierarchy-tree'>
         {rootNode ? (
-          renderHierarchy([rootNode], 0, selectedNode, setSelectedNode)
+          // Start with root's children instead of root itself
+          renderHierarchy(rootNode.children || [], 0, selectedNode, setSelectedNode, getNodeIcon)
         ) : (
           <div className='ahierarchy-empty'>
             <LayersIcon size={24} />
@@ -600,24 +627,15 @@ function InfoRow({ label, value }) {
   )
 }
 
-function renderHierarchy(nodes, depth = 0, selectedNode, setSelectedNode) {
+function renderHierarchy(nodes, depth = 0, selectedNode, setSelectedNode, getNodeIcon) {
   if (!Array.isArray(nodes)) return null
   
   return nodes.map(node => {
-    if (!node || node.id === '$root') return null // Skip root node
+    if (!node) return null
     
-    // Safely get children
     const children = node.children || []
     const hasChildren = Array.isArray(children) && children.length > 0
     const isSelected = selectedNode?.id === node.id
-
-    // Choose icon based on node type
-    const getNodeIcon = (node) => {
-      if (node.type === 'rigidbody') return <AnchorIcon size={14} />
-      if (node.type === 'collider') return <BoxIcon size={14} />
-      if (node.type === 'mesh') return <CubeIcon size={14} />
-      return <FolderIcon size={14} /> // Default for groups/empty nodes
-    }
     
     return (
       <div key={node.id || node.uuid || Math.random()}>
@@ -632,7 +650,7 @@ function renderHierarchy(nodes, depth = 0, selectedNode, setSelectedNode) {
           {getNodeIcon(node)}
           <span>{node.id || node.name || 'Unnamed'}</span>
         </div>
-        {hasChildren && renderHierarchy(children, depth + 1, selectedNode, setSelectedNode)}
+        {hasChildren && renderHierarchy(children, depth + 1, selectedNode, setSelectedNode, getNodeIcon)}
       </div>
     )
   })
