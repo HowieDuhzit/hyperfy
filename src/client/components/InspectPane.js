@@ -13,8 +13,7 @@ import {
   PackageCheckIcon,
   ShuffleIcon,
   XIcon,
-  ChevronDownIcon,
-  ChevronRightIcon,
+  LayersIcon,
 } from 'lucide-react'
 
 import { hashFile } from '../../core/utils-client'
@@ -91,16 +90,12 @@ export function AppPane({ world, app }) {
           border-bottom: 1px solid rgba(255, 255, 255, 0.05);
           display: flex;
           padding: 0 5px 0 16px;
-          overflow-x: auto;
           &-tab {
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 0 12px;
+            margin: 0 16px 0 0;
             cursor: pointer;
-            white-space: nowrap;
-            height: 100%;
-            
             span {
               font-size: 14px;
               color: #595959;
@@ -112,17 +107,13 @@ export function AppPane({ world, app }) {
                 color: white;
               }
             }
-            &:hover:not(.selected) span {
-              color: #888;
-            }
           }
           &-gap {
             flex: 1;
-            min-width: 8px;
           }
           &-close {
             color: #515151;
-            min-width: 30px;
+            width: 30px;
             height: 40px;
             display: flex;
             align-items: center;
@@ -160,8 +151,8 @@ export function AppPane({ world, app }) {
             <span>Edit</span>
           </div>
         )}
-        <div className={cls('apane-head-tab', { selected: tab === 'inspector' })} onClick={() => setTab('inspector')}>
-          <span>Inspector</span>
+        <div className={cls('apane-head-tab', { selected: tab === 'hierarchy' })} onClick={() => setTab('hierarchy')}>
+          <span>Hierarchy</span>
         </div>
         <div className='apane-head-gap' />
         <div className='apane-head-close' onClick={() => world.emit('inspect', null)}>
@@ -178,7 +169,7 @@ export function AppPane({ world, app }) {
         </>
       )}
       {tab === 'edit' && <AppPaneEdit world={world} app={app} blueprint={blueprint} />}
-      {tab === 'inspector' && <AppPaneInspector app={app} />}
+      {tab === 'hierarchy' && <AppPaneHierarchy app={app} />}
     </div>
   )
 }
@@ -423,6 +414,66 @@ function AppPaneEdit({ world, app, blueprint }) {
       </div>
     </div>
   )
+}
+
+function AppPaneHierarchy({ app }) {
+  return (
+    <div
+      className='ahierarchy noscrollbar'
+      css={css`
+        flex: 1;
+        padding: 20px;
+        max-height: 500px;
+        overflow-y: auto;
+        .ahierarchy-item {
+          display: flex;
+          align-items: center;
+          padding: 4px 0;
+          font-size: 14px;
+          cursor: pointer;
+          &:hover {
+            color: #00a7ff;
+          }
+          svg {
+            margin-right: 8px;
+            opacity: 0.5;
+          }
+          &-indent {
+            margin-left: 20px;
+          }
+        }
+        .ahierarchy-empty {
+          color: rgba(255, 255, 255, 0.5);
+          text-align: center;
+          padding: 20px;
+        }
+      `}
+    >
+      {app.nodes?.length > 0 ? (
+        renderHierarchy(app.nodes)
+      ) : (
+        <div className='ahierarchy-empty'>
+          <LayersIcon size={24} />
+          <div>No objects found</div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function renderHierarchy(nodes, depth = 0) {
+  return nodes.map(node => {
+    const hasChildren = node.children && node.children.length > 0
+    return (
+      <div key={node.id}>
+        <div className={cls('ahierarchy-item', { 'ahierarchy-item-indent': depth > 0 })} style={{ marginLeft: depth * 20 }}>
+          <LayersIcon size={14} />
+          <span>{node.id || 'Unnamed'}</span>
+        </div>
+        {hasChildren && renderHierarchy(node.children, depth + 1)}
+      </div>
+    )
+  })
 }
 
 function PlayerPane({ world, player }) {
@@ -943,85 +994,4 @@ function resolveURL(url) {
     return `https:${url}`
   }
   return `https://${url}`
-}
-
-function AppPaneInspector({ app }) {
-  const [expanded, setExpanded] = useState({})
-
-  const toggleNode = id => {
-    setExpanded(prev => ({
-      ...prev,
-      [id]: !prev[id]
-    }))
-  }
-
-  const renderNode = (node, depth = 0) => {
-    const hasChildren = node.children && node.children.length > 0
-    const isExpanded = expanded[node.id]
-
-    return (
-      <div key={node.id}>
-        <div 
-          className='inspector-node'
-          style={{ paddingLeft: `${depth * 20}px` }}
-          onClick={() => hasChildren && toggleNode(node.id)}
-        >
-          {hasChildren && (
-            <div className='inspector-node-arrow'>
-              {isExpanded ? <ChevronDownIcon size={16} /> : <ChevronRightIcon size={16} />}
-            </div>
-          )}
-          <div className='inspector-node-name'>{node.id || 'unnamed'}</div>
-          <div className='inspector-node-type'>{node.type}</div>
-        </div>
-        {hasChildren && isExpanded && node.children.map(child => renderNode(child, depth + 1))}
-      </div>
-    )
-  }
-
-  return (
-    <div 
-      className='inspector noscrollbar'
-      css={css`
-        flex: 1;
-        padding: 10px 0;
-        max-height: 500px;
-        overflow-y: auto;
-        
-        .inspector-node {
-          display: flex;
-          align-items: center;
-          padding: 4px 10px;
-          cursor: pointer;
-          
-          &:hover {
-            background: rgba(255, 255, 255, 0.05);
-          }
-          
-          &-arrow {
-            width: 20px;
-            height: 20px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-right: 4px;
-            color: #666;
-          }
-          
-          &-name {
-            flex: 1;
-            font-size: 14px;
-          }
-          
-          &-type {
-            font-size: 12px;
-            color: #666;
-            margin-left: 8px;
-          }
-        }
-      `}
-    >
-      {renderNode(app)}
-    </div>
-  )
 }
