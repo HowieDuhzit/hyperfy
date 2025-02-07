@@ -14,6 +14,9 @@ import {
   ShuffleIcon,
   XIcon,
   LayersIcon,
+  CubeIcon,
+  AnchorIcon,
+  FolderIcon,
 } from 'lucide-react'
 
 import { hashFile } from '../../core/utils-client'
@@ -601,12 +604,20 @@ function renderHierarchy(nodes, depth = 0, selectedNode, setSelectedNode) {
   if (!Array.isArray(nodes)) return null
   
   return nodes.map(node => {
-    if (!node) return null
+    if (!node || node.id === '$root') return null // Skip root node
     
     // Safely get children
     const children = node.children || []
     const hasChildren = Array.isArray(children) && children.length > 0
     const isSelected = selectedNode?.id === node.id
+
+    // Choose icon based on node type
+    const getNodeIcon = (node) => {
+      if (node.type === 'rigidbody') return <AnchorIcon size={14} />
+      if (node.type === 'collider') return <BoxIcon size={14} />
+      if (node.type === 'mesh') return <CubeIcon size={14} />
+      return <FolderIcon size={14} /> // Default for groups/empty nodes
+    }
     
     return (
       <div key={node.id || node.uuid || Math.random()}>
@@ -618,7 +629,7 @@ function renderHierarchy(nodes, depth = 0, selectedNode, setSelectedNode) {
           style={{ marginLeft: depth * 20 }}
           onClick={() => setSelectedNode(node)}
         >
-          <LayersIcon size={14} />
+          {getNodeIcon(node)}
           <span>{node.id || node.name || 'Unnamed'}</span>
         </div>
         {hasChildren && renderHierarchy(children, depth + 1, selectedNode, setSelectedNode)}
