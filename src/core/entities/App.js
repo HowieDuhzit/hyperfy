@@ -1,4 +1,4 @@
-import { isString } from 'lodash-es'
+import { isArray, isFunction, isString } from 'lodash-es'
 import * as THREE from '../extras/three'
 import moment from 'moment'
 
@@ -9,9 +9,15 @@ import { LerpVector3 } from '../extras/LerpVector3'
 import { LerpQuaternion } from '../extras/LerpQuaternion'
 import { ControlPriorities } from '../extras/ControlPriorities'
 import { getRef } from '../nodes/Node'
+import { DEG2RAD } from '../extras/general'
 
 const hotEventNames = ['fixedUpdate', 'update', 'lateUpdate']
 const internalEvents = ['fixedUpdate', 'updated', 'lateUpdate', 'enter', 'leave', 'chat']
+
+const v1 = new THREE.Vector3()
+
+const SNAP_DISTANCE = 0.5
+const SNAP_DEGREES = 5
 
 const Modes = {
   ACTIVE: 'active',
@@ -30,11 +36,12 @@ export class App extends Entity {
     this.worldListeners = new Map()
     this.listeners = {}
     this.eventQueue = []
+    this.fields = []
     this.build()
   }
 
-  createNode(name) {
-    const node = createNode({ name })
+  createNode(name, data) {
+    const node = createNode(name, data)
     return node
   }
 
@@ -43,27 +50,18 @@ export class App extends Entity {
     const n = ++this.n
     // fetch blueprint
     const blueprint = this.world.blueprints.get(this.data.blueprint)
-    // fetch script (if any)
-    let script
-    if (blueprint.script) {
-      try {
-        script = this.world.loader.get('script', blueprint.script)
-        if (!script) script = await this.world.loader.load('script', blueprint.script)
-      } catch (err) {
-        console.error(err)
-        crashed = true
-      }
-    }
+
     let root
+    let script
     // if someone else is uploading glb, show a loading indicator
     if (this.data.uploader && this.data.uploader !== this.world.network.id) {
-      root = createNode({ name: 'mesh' })
+      root = createNode('mesh')
       root.type = 'box'
       root.width = 1
       root.height = 1
       root.depth = 1
     }
-    // otherwise we can load the actual glb
+    // otherwise we can load the model and script
     else {
       try {
         const type = blueprint.model.endsWith('vrm') ? 'avatar' : 'model'
@@ -73,6 +71,16 @@ export class App extends Entity {
       } catch (err) {
         console.error(err)
         // no model, will use crash block below
+      }
+      // fetch script (if any)
+      if (blueprint.script) {
+        try {
+          script = this.world.loader.get('script', blueprint.script)
+          if (!script) script = await this.world.loader.load('script', blueprint.script)
+        } catch (err) {
+          console.error(err)
+          crashed = true
+        }
       }
     }
     // if script crashed (or failed to load model), show crash-block
@@ -95,13 +103,13 @@ export class App extends Entity {
     this.root.position.fromArray(this.data.position)
     this.root.quaternion.fromArray(this.data.quaternion)
     // activate
-    this.root.activate({ world: this.world, entity: this, physics: !this.data.mover })
+    this.root.activate({ world: this.world, entity: this, moving: !!this.data.mover })
     // execute script
     if (this.mode === Modes.ACTIVE && script && !crashed) {
       this.abortController = new AbortController()
       this.script = script
       try {
-        this.script.exec(this.getWorldProxy(), this.getAppProxy(), this.fetch)
+        this.script.exec(this.getWorldProxy(), this.getAppProxy(), this.fetch, blueprint.props)
       } catch (err) {
         console.error('script crashed')
         console.error(err)
@@ -109,12 +117,35 @@ export class App extends Entity {
       }
     }
     // if moving we need updates
-    if (this.mode === Modes.MOVING) this.world.setHot(this, true)
+    if (this.mode === Modes.MOVING) {
+      this.world.setHot(this, true)
+      // and we need a list of any snap points
+      this.snaps = []
+      this.root.traverse(node => {
+        if (node.name === 'snap') {
+          this.snaps.push(node.worldPosition)
+        }
+      })
+    }
     // if we're the mover lets bind controls
     if (this.data.mover === this.world.network.id) {
       this.lastMoveSendTime = 0
       this.control = this.world.controls.bind({
         priority: ControlPriorities.ENTITY,
+        onPress: code => {
+          if (code === 'ShiftLeft') {
+            this.control._lifting = true
+            this.control.pointer.lock()
+            return true
+          }
+        },
+        onRelease: code => {
+          if (code === 'ShiftLeft') {
+            this.control._lifting = false
+            this.control.pointer.unlock()
+            return true
+          }
+        },
         onScroll: () => {
           return true
         },
@@ -147,6 +178,9 @@ export class App extends Entity {
     this.hotEvents = 0
     // release control
     if (this.control) {
+      if (this.control._lifting) {
+        this.control.pointer.unlock()
+      }
       this.control?.release()
       this.control = null
     }
@@ -155,6 +189,8 @@ export class App extends Entity {
     // abort fetch's etc
     this.abortController?.abort()
     this.abortController = null
+    // clear fields
+    this.onFields?.([])
   }
 
   fixedUpdate(delta) {
@@ -174,9 +210,18 @@ export class App extends Entity {
   update(delta) {
     // if we're moving the app, handle that
     if (this.data.mover === this.world.network.id) {
-      if (this.control.buttons.ShiftLeft) {
+      // we cant just update the root directly and must track where it
+      // should be theoretically, and then apply snap points on top of that.
+      if (!this.target) {
+        this.target = new THREE.Object3D()
+        this.target.position.copy(this.root.position)
+        this.target.quaternion.copy(this.root.quaternion)
+        this.target.rotation.reorder('YXZ')
+        document.body.style.cursor = 'grabbing'
+      }
+      if (this.control._lifting) {
         // if shift is down we're raising and lowering the app
-        this.root.position.y -= this.world.controls.pointer.delta.y * delta * 0.5
+        this.target.position.y -= this.world.controls.pointer.delta.y * delta * 0.5
       } else {
         // otherwise move with the cursor
         const position = this.world.controls.pointer.position
@@ -190,10 +235,29 @@ export class App extends Entity {
           break
         }
         if (hit) {
-          this.root.position.copy(hit.point)
+          this.target.position.copy(hit.point)
         }
         // and rotate with the mouse wheel
-        this.root.rotation.y += this.control.scroll.delta * 0.1 * delta
+        this.target.rotation.y += this.control.scroll.delta * 0.1 * delta
+      }
+      // apply movement
+      this.root.position.copy(this.target.position)
+      this.root.quaternion.copy(this.target.quaternion)
+      // snap rotation to degrees
+      const newY = this.target.rotation.y
+      const degrees = newY / DEG2RAD
+      const snappedDegrees = Math.round(degrees / SNAP_DEGREES) * SNAP_DEGREES
+      this.root.rotation.y = snappedDegrees * DEG2RAD
+      // update matrix
+      this.root.clean()
+      // and snap to any nearby points
+      for (const pos of this.snaps) {
+        const result = this.world.snaps.octree.query(pos, SNAP_DISTANCE)[0]
+        if (result) {
+          const offset = v1.copy(result.position).sub(pos)
+          this.root.position.add(offset)
+          break
+        }
       }
 
       // periodically send updates
@@ -220,6 +284,8 @@ export class App extends Entity {
           state: this.data.state,
         })
         this.build()
+        this.target = null
+        document.body.style.cursor = 'default'
       }
     }
     // if someone else is moving the app, interpolate updates
@@ -409,7 +475,7 @@ export class App extends Entity {
           node.parent.remove(node)
         }
         entity.worldNodes.add(node)
-        node.activate({ world, entity, physics: true })
+        node.activate({ world, entity })
       },
       remove(pNode) {
         const node = getRef(pNode)
@@ -427,7 +493,7 @@ export class App extends Entity {
         parent.remove(node)
         node.matrix.copy(node.matrixWorld)
         node.matrix.decompose(node.position, node.quaternion, node.scale)
-        node.activate({ world, entity, physics: true })
+        node.activate({ world, entity })
         entity.worldNodes.add(node)
       },
       on(name, callback) {
@@ -502,8 +568,8 @@ export class App extends Entity {
         if (!node) return null
         return node.getProxy()
       },
-      create(name) {
-        const node = entity.createNode(name)
+      create(name, data) {
+        const node = entity.createNode(name, data)
         return node.getProxy()
       },
       control(options) {
@@ -516,12 +582,30 @@ export class App extends Entity {
         })
         return entity.control
       },
-      configure(fn) {
-        entity.getConfig = fn
-        entity.onConfigure?.(fn)
+      configure(fnOrArray) {
+        if (isArray(fnOrArray)) {
+          entity.fields = fnOrArray
+        } else if (isFunction(fnOrArray)) {
+          entity.fields = fnOrArray() // deprecated
+        }
+        if (!isArray(entity.fields)) {
+          entity.fields = []
+        }
+        // apply any initial values
+        const props = entity.blueprint.props
+        for (const field of entity.fields) {
+          if (field.initial && props[field.key] === undefined) {
+            props[field.key] = field.initial
+          }
+        }
+        entity.onFields?.(entity.fields)
+      },
+      get props() {
+        return entity.blueprint.props
       },
       get config() {
-        return entity.blueprint.config
+        // deprecated. will be removed
+        return entity.blueprint.props
       },
     }
     proxy = Object.defineProperties(proxy, Object.getOwnPropertyDescriptors(this.root.getProxy())) // inherit root Node properties
