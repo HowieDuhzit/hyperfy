@@ -418,8 +418,10 @@ function AppPaneEdit({ world, app, blueprint }) {
 
 function AppPaneHierarchy({ app }) {
   const [selectedNode, setSelectedNode] = useState(null)
-  const rootNode = app.root
   
+  // Get the scene root node
+  const rootNode = app?.scene?.root || app?.root
+
   useEffect(() => {
     if (rootNode && !selectedNode) {
       setSelectedNode(rootNode)
@@ -430,6 +432,15 @@ function AppPaneHierarchy({ app }) {
   const getVectorString = (vec) => {
     if (!vec || typeof vec.x !== 'number') return null
     return `${vec.x.toFixed(2)}, ${vec.y.toFixed(2)}, ${vec.z.toFixed(2)}`
+  }
+
+  // Helper function to safely check if a property exists
+  const hasProperty = (obj, prop) => {
+    try {
+      return obj && typeof obj[prop] !== 'undefined'
+    } catch (err) {
+      return false
+    }
   }
 
   return (
@@ -504,11 +515,11 @@ function AppPaneHierarchy({ app }) {
 
       {selectedNode && (
         <div className='ahierarchy-info'>
-          <InfoRow label='Name' value={selectedNode.id || 'Unnamed'} />
+          <InfoRow label='Name' value={selectedNode.id || selectedNode.name || 'Unnamed'} />
           <InfoRow label='Type' value={selectedNode.type || 'Node'} />
           
           {/* Position */}
-          {getVectorString(selectedNode.position) && (
+          {hasProperty(selectedNode, 'position') && getVectorString(selectedNode.position) && (
             <InfoRow
               label='Position'
               value={getVectorString(selectedNode.position)}
@@ -516,7 +527,7 @@ function AppPaneHierarchy({ app }) {
           )}
 
           {/* Rotation */}
-          {getVectorString(selectedNode.rotation) && (
+          {hasProperty(selectedNode, 'rotation') && getVectorString(selectedNode.rotation) && (
             <InfoRow
               label='Rotation'
               value={getVectorString(selectedNode.rotation)}
@@ -524,7 +535,7 @@ function AppPaneHierarchy({ app }) {
           )}
 
           {/* Scale */}
-          {getVectorString(selectedNode.scale) && (
+          {hasProperty(selectedNode, 'scale') && getVectorString(selectedNode.scale) && (
             <InfoRow
               label='Scale'
               value={getVectorString(selectedNode.scale)}
@@ -532,26 +543,29 @@ function AppPaneHierarchy({ app }) {
           )}
 
           {/* Visibility */}
-          {typeof selectedNode.visible === 'boolean' && (
+          {hasProperty(selectedNode, 'visible') && (
             <InfoRow label='Visible' value={selectedNode.visible.toString()} />
           )}
 
           {/* Material */}
-          {selectedNode.material?.type && (
-            <InfoRow label='Material' value={selectedNode.material.type} />
-          )}
-          
-          {/* Material Color */}
-          {selectedNode.material?.color?.getHexString && (
-            <InfoRow 
-              label='Color' 
-              value={`#${selectedNode.material.color.getHexString()}`} 
-            />
+          {hasProperty(selectedNode, 'material') && selectedNode.material && (
+            <>
+              <InfoRow label='Material' value={selectedNode.material.type || 'Standard'} />
+              {hasProperty(selectedNode.material, 'color') && selectedNode.material.color && (
+                <InfoRow 
+                  label='Color' 
+                  value={selectedNode.material.color.getHexString ? 
+                    `#${selectedNode.material.color.getHexString()}` : 
+                    'Unknown'
+                  } 
+                />
+              )}
+            </>
           )}
 
           {/* Geometry */}
-          {selectedNode.geometry?.type && (
-            <InfoRow label='Geometry' value={selectedNode.geometry.type} />
+          {hasProperty(selectedNode, 'geometry') && selectedNode.geometry && (
+            <InfoRow label='Geometry' value={selectedNode.geometry.type || 'Custom'} />
           )}
         </div>
       )}
@@ -569,14 +583,18 @@ function InfoRow({ label, value }) {
 }
 
 function renderHierarchy(nodes, depth = 0, selectedNode, setSelectedNode) {
+  if (!Array.isArray(nodes)) return null
+  
   return nodes.map(node => {
-    // Get children from the node's children property
+    if (!node) return null
+    
+    // Safely get children
     const children = node.children || []
-    const hasChildren = children.length > 0
+    const hasChildren = Array.isArray(children) && children.length > 0
     const isSelected = selectedNode?.id === node.id
     
     return (
-      <div key={node.id || Math.random()}>
+      <div key={node.id || node.uuid || Math.random()}>
         <div 
           className={cls('ahierarchy-item', { 
             'ahierarchy-item-indent': depth > 0,
