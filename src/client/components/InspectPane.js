@@ -14,10 +14,6 @@ import {
   ShuffleIcon,
   XIcon,
   LayersIcon,
-  CubeIcon,
-  ShieldIcon,
-  ChevronRightIcon,
-  FolderIcon,
 } from 'lucide-react'
 
 import { hashFile } from '../../core/utils-client'
@@ -424,7 +420,8 @@ function AppPaneEdit({ world, app, blueprint }) {
 
 function AppPaneHierarchy({ app }) {
   const [selectedNode, setSelectedNode] = useState(null)
-  const [collapsed, setCollapsed] = useState(new Set())
+  
+  // Get the scene root node
   const rootNode = app?.scene?.root || app?.root
 
   useEffect(() => {
@@ -446,43 +443,6 @@ function AppPaneHierarchy({ app }) {
     } catch (err) {
       return false
     }
-  }
-
-  // Add helper to get appropriate icon for node type
-  const getNodeIcon = (node) => {
-    if (!node) return <LayersIcon size={14} />
-    
-    switch (node.type?.toLowerCase()) {
-      case 'mesh':
-        return <CubeIcon size={14} />
-      case 'rigidbody':
-        return <BoxIcon size={14} />
-      case 'collider':
-        return <ShieldIcon size={14} />
-      case 'group':
-        return <FolderIcon size={14} />
-      default:
-        return <LayersIcon size={14} />
-    }
-  }
-
-  const toggleCollapse = (nodeId) => {
-    setCollapsed(prev => {
-      const next = new Set(prev)
-      if (next.has(nodeId)) {
-        next.delete(nodeId)
-      } else {
-        next.add(nodeId)
-      }
-      return next
-    })
-  }
-
-  // Helper to get node display name
-  const getNodeName = (node) => {
-    if (!node) return 'Unnamed'
-    if (node === rootNode) return 'Root'
-    return node.id || node.name || 'Unnamed'
   }
 
   return (
@@ -514,23 +474,7 @@ function AppPaneHierarchy({ app }) {
             color: #00a7ff;
             background: rgba(0, 167, 255, 0.1);
           }
-          .collapse-icon {
-            width: 16px;
-            height: 16px;
-            margin-right: 4px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: transform 0.15s ease;
-            &.collapsed {
-              transform: rotate(-90deg);
-            }
-            &.empty {
-              opacity: 0;
-              pointer-events: none;
-            }
-          }
-          .node-icon {
+          svg {
             margin-right: 8px;
             opacity: 0.5;
             flex-shrink: 0;
@@ -575,7 +519,7 @@ function AppPaneHierarchy({ app }) {
     >
       <div className='ahierarchy-tree'>
         {rootNode ? (
-          renderHierarchy([rootNode], 0, selectedNode, setSelectedNode, collapsed, toggleCollapse, getNodeIcon, getNodeName)
+          renderHierarchy([rootNode], 0, selectedNode, setSelectedNode)
         ) : (
           <div className='ahierarchy-empty'>
             <LayersIcon size={24} />
@@ -653,16 +597,16 @@ function InfoRow({ label, value }) {
   )
 }
 
-function renderHierarchy(nodes, depth = 0, selectedNode, setSelectedNode, collapsed, toggleCollapse, getNodeIcon, getNodeName) {
+function renderHierarchy(nodes, depth = 0, selectedNode, setSelectedNode) {
   if (!Array.isArray(nodes)) return null
   
   return nodes.map(node => {
     if (!node) return null
     
+    // Safely get children
     const children = node.children || []
     const hasChildren = Array.isArray(children) && children.length > 0
     const isSelected = selectedNode?.id === node.id
-    const isCollapsed = collapsed.has(node.id)
     
     return (
       <div key={node.id || node.uuid || Math.random()}>
@@ -672,38 +616,12 @@ function renderHierarchy(nodes, depth = 0, selectedNode, setSelectedNode, collap
             'selected': isSelected 
           })} 
           style={{ marginLeft: depth * 20 }}
+          onClick={() => setSelectedNode(node)}
         >
-          <div 
-            className={cls('collapse-icon', {
-              collapsed: isCollapsed,
-              empty: !hasChildren
-            })}
-            onClick={(e) => {
-              e.stopPropagation()
-              if (hasChildren) {
-                toggleCollapse(node.id)
-              }
-            }}
-          >
-            {hasChildren && <ChevronRightIcon size={14} />}
-          </div>
-          <div className='node-icon' onClick={() => setSelectedNode(node)}>
-            {getNodeIcon(node)}
-          </div>
-          <span onClick={() => setSelectedNode(node)}>
-            {getNodeName(node)}
-          </span>
+          <LayersIcon size={14} />
+          <span>{node.id || node.name || 'Unnamed'}</span>
         </div>
-        {hasChildren && !isCollapsed && renderHierarchy(
-          children, 
-          depth + 1, 
-          selectedNode, 
-          setSelectedNode,
-          collapsed,
-          toggleCollapse,
-          getNodeIcon,
-          getNodeName
-        )}
+        {hasChildren && renderHierarchy(children, depth + 1, selectedNode, setSelectedNode)}
       </div>
     )
   })
