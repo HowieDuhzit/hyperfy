@@ -418,16 +418,19 @@ function AppPaneEdit({ world, app, blueprint }) {
 
 function AppPaneHierarchy({ app }) {
   const [selectedNode, setSelectedNode] = useState(null)
-
-  // Get root node from app
   const rootNode = app.root
   
   useEffect(() => {
-    // Set initial selection to root node
     if (rootNode && !selectedNode) {
       setSelectedNode(rootNode)
     }
   }, [rootNode])
+
+  // Helper function to safely get vector string
+  const getVectorString = (vec) => {
+    if (!vec || typeof vec.x !== 'number') return null
+    return `${vec.x.toFixed(2)}, ${vec.y.toFixed(2)}, ${vec.z.toFixed(2)}`
+  }
 
   return (
     <div
@@ -503,37 +506,52 @@ function AppPaneHierarchy({ app }) {
         <div className='ahierarchy-info'>
           <InfoRow label='Name' value={selectedNode.id || 'Unnamed'} />
           <InfoRow label='Type' value={selectedNode.type || 'Node'} />
-          {selectedNode.position && (
+          
+          {/* Position */}
+          {getVectorString(selectedNode.position) && (
             <InfoRow
               label='Position'
-              value={`${selectedNode.position.x.toFixed(2)}, ${selectedNode.position.y.toFixed(2)}, ${selectedNode.position.z.toFixed(2)}`}
+              value={getVectorString(selectedNode.position)}
             />
           )}
-          {selectedNode.rotation && (
+
+          {/* Rotation */}
+          {getVectorString(selectedNode.rotation) && (
             <InfoRow
               label='Rotation'
-              value={`${selectedNode.rotation.x.toFixed(2)}, ${selectedNode.rotation.y.toFixed(2)}, ${selectedNode.rotation.z.toFixed(2)}`}
+              value={getVectorString(selectedNode.rotation)}
             />
           )}
-          {selectedNode.scale && (
+
+          {/* Scale */}
+          {getVectorString(selectedNode.scale) && (
             <InfoRow
               label='Scale'
-              value={`${selectedNode.scale.x.toFixed(2)}, ${selectedNode.scale.y.toFixed(2)}, ${selectedNode.scale.z.toFixed(2)}`}
+              value={getVectorString(selectedNode.scale)}
             />
           )}
-          {selectedNode.visible !== undefined && (
+
+          {/* Visibility */}
+          {typeof selectedNode.visible === 'boolean' && (
             <InfoRow label='Visible' value={selectedNode.visible.toString()} />
           )}
-          {selectedNode.material && (
-            <>
-              <InfoRow label='Material' value={selectedNode.material.type || 'Standard'} />
-              {selectedNode.material.color && (
-                <InfoRow label='Color' value={`#${selectedNode.material.color.getHexString()}`} />
-              )}
-            </>
+
+          {/* Material */}
+          {selectedNode.material?.type && (
+            <InfoRow label='Material' value={selectedNode.material.type} />
           )}
-          {selectedNode.geometry && (
-            <InfoRow label='Geometry' value={selectedNode.geometry.type || 'Custom'} />
+          
+          {/* Material Color */}
+          {selectedNode.material?.color?.getHexString && (
+            <InfoRow 
+              label='Color' 
+              value={`#${selectedNode.material.color.getHexString()}`} 
+            />
+          )}
+
+          {/* Geometry */}
+          {selectedNode.geometry?.type && (
+            <InfoRow label='Geometry' value={selectedNode.geometry.type} />
           )}
         </div>
       )}
