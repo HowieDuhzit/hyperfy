@@ -418,9 +418,12 @@ function AppPaneEdit({ world, app, blueprint }) {
 
 function AppPaneHierarchy({ app }) {
   const [selectedNode, setSelectedNode] = useState(null)
+
+  // Get root node from app's model
   const rootNode = app.model?.root
   
   useEffect(() => {
+    // Set initial selection to root node
     if (rootNode && !selectedNode) {
       setSelectedNode(rootNode)
     }
@@ -488,27 +491,15 @@ function AppPaneHierarchy({ app }) {
       className='ahierarchy noscrollbar'
       css={css`
         flex: 1;
+        padding: 20px;
+        max-height: 500px;
+        overflow-y: auto;
         display: flex;
         flex-direction: column;
-        height: 100%;
-        max-height: calc(100vh - 150px); // Account for header and padding
-        min-height: 200px;
-
         .ahierarchy-tree {
           flex: 1;
-          overflow-y: auto;
-          padding: 20px 20px 0;
-          min-height: 100px;
-
-          /* Hide scrollbar for Chrome/Safari/Opera */
-          &::-webkit-scrollbar {
-            display: none;
-          }
-          /* Hide scrollbar for IE, Edge and Firefox */
-          -ms-overflow-style: none;
-          scrollbar-width: none;
+          margin-bottom: 20px;
         }
-
         .ahierarchy-item {
           display: flex;
           align-items: center;
@@ -521,62 +512,31 @@ function AppPaneHierarchy({ app }) {
           &.selected {
             color: #00a7ff;
             background: rgba(0, 167, 255, 0.1);
-            border-radius: 4px;
-            padding: 4px 8px;
-            margin: 0 -8px;
           }
           svg {
             margin-right: 8px;
             opacity: 0.5;
-            flex-shrink: 0;
-          }
-          span {
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
           }
           &-indent {
             margin-left: 20px;
           }
         }
-
         .ahierarchy-empty {
           color: rgba(255, 255, 255, 0.5);
           text-align: center;
           padding: 20px;
-          svg {
-            margin-bottom: 8px;
-          }
         }
-
         .ahierarchy-info {
-          flex-shrink: 0;
           border-top: 1px solid rgba(255, 255, 255, 0.05);
-          margin: 0 20px;
-          padding: 20px 0;
-          max-height: 200px;
-          overflow-y: auto;
-
-          /* Hide scrollbar for Chrome/Safari/Opera */
-          &::-webkit-scrollbar {
-            display: none;
-          }
-          /* Hide scrollbar for IE, Edge and Firefox */
-          -ms-overflow-style: none;
-          scrollbar-width: none;
+          padding-top: 20px;
         }
-
         .ahierarchy-info-row {
           display: flex;
           margin-bottom: 8px;
           font-size: 14px;
-          &:last-child {
-            margin-bottom: 0;
-          }
           &-label {
             width: 100px;
             color: rgba(255, 255, 255, 0.5);
-            flex-shrink: 0;
           }
           &-value {
             flex: 1;
