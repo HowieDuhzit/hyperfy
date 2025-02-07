@@ -418,31 +418,97 @@ function AppPaneEdit({ world, app, blueprint }) {
 
 function AppPaneHierarchy({ app }) {
   const [selectedNode, setSelectedNode] = useState(null)
-
-  // Get root node from app
-  const rootNode = app.root
+  const rootNode = app.model?.root
   
   useEffect(() => {
-    // Set initial selection to root node
     if (rootNode && !selectedNode) {
       setSelectedNode(rootNode)
     }
   }, [rootNode])
+
+  const getNodeInfo = (node) => {
+    const info = []
+    
+    if (node.id || node.name) {
+      info.push({ label: 'Name', value: node.id || node.name })
+    }
+    
+    if (node.type) {
+      info.push({ label: 'Type', value: node.type })
+    }
+
+    // Only add position/rotation/scale if they exist and have x/y/z properties
+    if (node.position?.x !== undefined) {
+      info.push({
+        label: 'Position',
+        value: `${node.position.x.toFixed(2)}, ${node.position.y.toFixed(2)}, ${node.position.z.toFixed(2)}`
+      })
+    }
+
+    if (node.rotation?.x !== undefined) {
+      info.push({
+        label: 'Rotation',
+        value: `${node.rotation.x.toFixed(2)}, ${node.rotation.y.toFixed(2)}, ${node.rotation.z.toFixed(2)}`
+      })
+    }
+
+    if (node.scale?.x !== undefined) {
+      info.push({
+        label: 'Scale',
+        value: `${node.scale.x.toFixed(2)}, ${node.scale.y.toFixed(2)}, ${node.scale.z.toFixed(2)}`
+      })
+    }
+
+    if (node.visible !== undefined) {
+      info.push({ label: 'Visible', value: node.visible.toString() })
+    }
+
+    // Only add material info if it exists
+    try {
+      if (node.material?.type) {
+        info.push({ label: 'Material', value: node.material.type })
+        if (node.material.color?.getHexString) {
+          info.push({ label: 'Color', value: `#${node.material.color.getHexString()}` })
+        }
+      }
+    } catch (err) {
+      console.warn('Error accessing material properties:', err)
+    }
+
+    // Only add geometry info if it exists
+    if (node.geometry?.type) {
+      info.push({ label: 'Geometry', value: node.geometry.type })
+    }
+
+    return info
+  }
 
   return (
     <div
       className='ahierarchy noscrollbar'
       css={css`
         flex: 1;
-        padding: 20px;
-        max-height: 500px;
-        overflow-y: auto;
         display: flex;
         flex-direction: column;
+        height: 100%;
+        max-height: calc(100vh - 150px); // Account for header and padding
+        min-height: 200px;
+
         .ahierarchy-tree {
           flex: 1;
-          margin-bottom: 20px;
+          overflow-y: auto;
+          padding: 20px 20px 0;
+          min-height: 100px;
+
+          /* Hide scrollbar for Chrome/Safari/Opera */
+          &::-webkit-scrollbar {
+            display: none;
+          }
+          /* Hide scrollbar for IE, Edge and Firefox */
+          -ms-overflow-style: none;
+          scrollbar-width: none;
         }
+
         .ahierarchy-item {
           display: flex;
           align-items: center;
@@ -455,31 +521,62 @@ function AppPaneHierarchy({ app }) {
           &.selected {
             color: #00a7ff;
             background: rgba(0, 167, 255, 0.1);
+            border-radius: 4px;
+            padding: 4px 8px;
+            margin: 0 -8px;
           }
           svg {
             margin-right: 8px;
             opacity: 0.5;
+            flex-shrink: 0;
+          }
+          span {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
           }
           &-indent {
             margin-left: 20px;
           }
         }
+
         .ahierarchy-empty {
           color: rgba(255, 255, 255, 0.5);
           text-align: center;
           padding: 20px;
+          svg {
+            margin-bottom: 8px;
+          }
         }
+
         .ahierarchy-info {
+          flex-shrink: 0;
           border-top: 1px solid rgba(255, 255, 255, 0.05);
-          padding-top: 20px;
+          margin: 0 20px;
+          padding: 20px 0;
+          max-height: 200px;
+          overflow-y: auto;
+
+          /* Hide scrollbar for Chrome/Safari/Opera */
+          &::-webkit-scrollbar {
+            display: none;
+          }
+          /* Hide scrollbar for IE, Edge and Firefox */
+          -ms-overflow-style: none;
+          scrollbar-width: none;
         }
+
         .ahierarchy-info-row {
           display: flex;
           margin-bottom: 8px;
           font-size: 14px;
+          &:last-child {
+            margin-bottom: 0;
+          }
           &-label {
             width: 100px;
             color: rgba(255, 255, 255, 0.5);
+            flex-shrink: 0;
           }
           &-value {
             flex: 1;
@@ -501,40 +598,9 @@ function AppPaneHierarchy({ app }) {
 
       {selectedNode && (
         <div className='ahierarchy-info'>
-          <InfoRow label='Name' value={selectedNode.id || 'Unnamed'} />
-          <InfoRow label='Type' value={selectedNode.type || 'Node'} />
-          {selectedNode.position && (
-            <InfoRow
-              label='Position'
-              value={`${selectedNode.position.x.toFixed(2)}, ${selectedNode.position.y.toFixed(2)}, ${selectedNode.position.z.toFixed(2)}`}
-            />
-          )}
-          {selectedNode.rotation && (
-            <InfoRow
-              label='Rotation'
-              value={`${selectedNode.rotation.x.toFixed(2)}, ${selectedNode.rotation.y.toFixed(2)}, ${selectedNode.rotation.z.toFixed(2)}`}
-            />
-          )}
-          {selectedNode.scale && (
-            <InfoRow
-              label='Scale'
-              value={`${selectedNode.scale.x.toFixed(2)}, ${selectedNode.scale.y.toFixed(2)}, ${selectedNode.scale.z.toFixed(2)}`}
-            />
-          )}
-          {selectedNode.visible !== undefined && (
-            <InfoRow label='Visible' value={selectedNode.visible.toString()} />
-          )}
-          {selectedNode.material && (
-            <>
-              <InfoRow label='Material' value={selectedNode.material.type || 'Standard'} />
-              {selectedNode.material.color && (
-                <InfoRow label='Color' value={`#${selectedNode.material.color.getHexString()}`} />
-              )}
-            </>
-          )}
-          {selectedNode.geometry && (
-            <InfoRow label='Geometry' value={selectedNode.geometry.type || 'Custom'} />
-          )}
+          {getNodeInfo(selectedNode).map((info, index) => (
+            <InfoRow key={index} label={info.label} value={info.value} />
+          ))}
         </div>
       )}
     </div>
@@ -552,13 +618,16 @@ function InfoRow({ label, value }) {
 
 function renderHierarchy(nodes, depth = 0, selectedNode, setSelectedNode) {
   return nodes.map(node => {
-    // Get children from the node's children property
-    const children = node.children || []
+    // Get children safely
+    const children = Array.isArray(node.children) ? node.children : []
     const hasChildren = children.length > 0
     const isSelected = selectedNode?.id === node.id
     
+    // Generate unique key
+    const key = node.uuid || node.id || Math.random().toString(36)
+    
     return (
-      <div key={node.id || Math.random()}>
+      <div key={key}>
         <div 
           className={cls('ahierarchy-item', { 
             'ahierarchy-item-indent': depth > 0,
