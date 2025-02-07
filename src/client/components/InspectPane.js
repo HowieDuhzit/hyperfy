@@ -419,8 +419,8 @@ function AppPaneEdit({ world, app, blueprint }) {
 function AppPaneHierarchy({ app }) {
   const [selectedNode, setSelectedNode] = useState(null)
 
-  // Get root node from app's model
-  const rootNode = app.model?.root
+  // Get root node from app
+  const rootNode = app.root
   
   useEffect(() => {
     // Set initial selection to root node
@@ -428,63 +428,6 @@ function AppPaneHierarchy({ app }) {
       setSelectedNode(rootNode)
     }
   }, [rootNode])
-
-  const getNodeInfo = (node) => {
-    const info = []
-    
-    if (node.id || node.name) {
-      info.push({ label: 'Name', value: node.id || node.name })
-    }
-    
-    if (node.type) {
-      info.push({ label: 'Type', value: node.type })
-    }
-
-    // Only add position/rotation/scale if they exist and have x/y/z properties
-    if (node.position?.x !== undefined) {
-      info.push({
-        label: 'Position',
-        value: `${node.position.x.toFixed(2)}, ${node.position.y.toFixed(2)}, ${node.position.z.toFixed(2)}`
-      })
-    }
-
-    if (node.rotation?.x !== undefined) {
-      info.push({
-        label: 'Rotation',
-        value: `${node.rotation.x.toFixed(2)}, ${node.rotation.y.toFixed(2)}, ${node.rotation.z.toFixed(2)}`
-      })
-    }
-
-    if (node.scale?.x !== undefined) {
-      info.push({
-        label: 'Scale',
-        value: `${node.scale.x.toFixed(2)}, ${node.scale.y.toFixed(2)}, ${node.scale.z.toFixed(2)}`
-      })
-    }
-
-    if (node.visible !== undefined) {
-      info.push({ label: 'Visible', value: node.visible.toString() })
-    }
-
-    // Only add material info if it exists
-    try {
-      if (node.material?.type) {
-        info.push({ label: 'Material', value: node.material.type })
-        if (node.material.color?.getHexString) {
-          info.push({ label: 'Color', value: `#${node.material.color.getHexString()}` })
-        }
-      }
-    } catch (err) {
-      console.warn('Error accessing material properties:', err)
-    }
-
-    // Only add geometry info if it exists
-    if (node.geometry?.type) {
-      info.push({ label: 'Geometry', value: node.geometry.type })
-    }
-
-    return info
-  }
 
   return (
     <div
@@ -558,9 +501,40 @@ function AppPaneHierarchy({ app }) {
 
       {selectedNode && (
         <div className='ahierarchy-info'>
-          {getNodeInfo(selectedNode).map((info, index) => (
-            <InfoRow key={index} label={info.label} value={info.value} />
-          ))}
+          <InfoRow label='Name' value={selectedNode.id || 'Unnamed'} />
+          <InfoRow label='Type' value={selectedNode.type || 'Node'} />
+          {selectedNode.position && (
+            <InfoRow
+              label='Position'
+              value={`${selectedNode.position.x.toFixed(2)}, ${selectedNode.position.y.toFixed(2)}, ${selectedNode.position.z.toFixed(2)}`}
+            />
+          )}
+          {selectedNode.rotation && (
+            <InfoRow
+              label='Rotation'
+              value={`${selectedNode.rotation.x.toFixed(2)}, ${selectedNode.rotation.y.toFixed(2)}, ${selectedNode.rotation.z.toFixed(2)}`}
+            />
+          )}
+          {selectedNode.scale && (
+            <InfoRow
+              label='Scale'
+              value={`${selectedNode.scale.x.toFixed(2)}, ${selectedNode.scale.y.toFixed(2)}, ${selectedNode.scale.z.toFixed(2)}`}
+            />
+          )}
+          {selectedNode.visible !== undefined && (
+            <InfoRow label='Visible' value={selectedNode.visible.toString()} />
+          )}
+          {selectedNode.material && (
+            <>
+              <InfoRow label='Material' value={selectedNode.material.type || 'Standard'} />
+              {selectedNode.material.color && (
+                <InfoRow label='Color' value={`#${selectedNode.material.color.getHexString()}`} />
+              )}
+            </>
+          )}
+          {selectedNode.geometry && (
+            <InfoRow label='Geometry' value={selectedNode.geometry.type || 'Custom'} />
+          )}
         </div>
       )}
     </div>
@@ -578,16 +552,13 @@ function InfoRow({ label, value }) {
 
 function renderHierarchy(nodes, depth = 0, selectedNode, setSelectedNode) {
   return nodes.map(node => {
-    // Get children safely
-    const children = Array.isArray(node.children) ? node.children : []
+    // Get children from the node's children property
+    const children = node.children || []
     const hasChildren = children.length > 0
     const isSelected = selectedNode?.id === node.id
     
-    // Generate unique key
-    const key = node.uuid || node.id || Math.random().toString(36)
-    
     return (
-      <div key={key}>
+      <div key={node.id || Math.random()}>
         <div 
           className={cls('ahierarchy-item', { 
             'ahierarchy-item-indent': depth > 0,
