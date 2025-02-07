@@ -78,6 +78,7 @@ export function AppPane({ world, app }) {
         top: 20px;
         left: 20px;
         width: 320px;
+        max-height: calc(100vh - 40px);
         background: rgba(22, 22, 28, 1);
         border: 1px solid rgba(255, 255, 255, 0.03);
         border-radius: 10px;
@@ -85,6 +86,7 @@ export function AppPane({ world, app }) {
         pointer-events: auto;
         display: flex;
         flex-direction: column;
+        overflow: hidden;
         .apane-head {
           height: 40px;
           border-bottom: 1px solid rgba(255, 255, 255, 0.05);
@@ -449,13 +451,15 @@ function AppPaneHierarchy({ app }) {
       css={css`
         flex: 1;
         padding: 20px;
-        max-height: 500px;
-        overflow-y: auto;
+        min-height: 200px;
         display: flex;
         flex-direction: column;
+        overflow: hidden;
         .ahierarchy-tree {
           flex: 1;
+          overflow-y: auto;
           margin-bottom: 20px;
+          padding-right: 10px;
         }
         .ahierarchy-item {
           display: flex;
@@ -473,6 +477,12 @@ function AppPaneHierarchy({ app }) {
           svg {
             margin-right: 8px;
             opacity: 0.5;
+            flex-shrink: 0;
+          }
+          span {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
           }
           &-indent {
             margin-left: 20px;
@@ -484,8 +494,12 @@ function AppPaneHierarchy({ app }) {
           padding: 20px;
         }
         .ahierarchy-info {
+          flex-shrink: 0;
           border-top: 1px solid rgba(255, 255, 255, 0.05);
           padding-top: 20px;
+          max-height: 40vh;
+          overflow-y: auto;
+          padding-right: 10px;
         }
         .ahierarchy-info-row {
           display: flex;
@@ -494,6 +508,7 @@ function AppPaneHierarchy({ app }) {
           &-label {
             width: 100px;
             color: rgba(255, 255, 255, 0.5);
+            flex-shrink: 0;
           }
           &-value {
             flex: 1;
