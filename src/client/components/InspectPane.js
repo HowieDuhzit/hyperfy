@@ -417,6 +417,8 @@ function AppPaneEdit({ world, app, blueprint }) {
 }
 
 function AppPaneHierarchy({ app }) {
+  const [selectedNode, setSelectedNode] = useState(null)
+
   return (
     <div
       className='ahierarchy noscrollbar'
@@ -425,6 +427,12 @@ function AppPaneHierarchy({ app }) {
         padding: 20px;
         max-height: 500px;
         overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        .ahierarchy-tree {
+          flex: 1;
+          margin-bottom: 20px;
+        }
         .ahierarchy-item {
           display: flex;
           align-items: center;
@@ -433,6 +441,10 @@ function AppPaneHierarchy({ app }) {
           cursor: pointer;
           &:hover {
             color: #00a7ff;
+          }
+          &.selected {
+            color: #00a7ff;
+            background: rgba(0, 167, 255, 0.1);
           }
           svg {
             margin-right: 8px;
@@ -447,30 +459,95 @@ function AppPaneHierarchy({ app }) {
           text-align: center;
           padding: 20px;
         }
+        .ahierarchy-info {
+          border-top: 1px solid rgba(255, 255, 255, 0.05);
+          padding-top: 20px;
+        }
+        .ahierarchy-info-row {
+          display: flex;
+          margin-bottom: 8px;
+          font-size: 14px;
+          &-label {
+            width: 100px;
+            color: rgba(255, 255, 255, 0.5);
+          }
+          &-value {
+            flex: 1;
+            word-break: break-word;
+          }
+        }
       `}
     >
-      {app.nodes?.length > 0 ? (
-        renderHierarchy(app.nodes)
-      ) : (
-        <div className='ahierarchy-empty'>
-          <LayersIcon size={24} />
-          <div>No objects found</div>
+      <div className='ahierarchy-tree'>
+        {app.nodes?.length > 0 ? (
+          renderHierarchy(app.nodes, 0, selectedNode, setSelectedNode)
+        ) : (
+          <div className='ahierarchy-empty'>
+            <LayersIcon size={24} />
+            <div>No objects found</div>
+          </div>
+        )}
+      </div>
+
+      {selectedNode && (
+        <div className='ahierarchy-info'>
+          <InfoRow label='Name' value={selectedNode.id || 'Unnamed'} />
+          <InfoRow label='Type' value={selectedNode.type || 'Node'} />
+          {selectedNode.position && (
+            <InfoRow
+              label='Position'
+              value={`${selectedNode.position.x.toFixed(2)}, ${selectedNode.position.y.toFixed(2)}, ${selectedNode.position.z.toFixed(2)}`}
+            />
+          )}
+          {selectedNode.rotation && (
+            <InfoRow
+              label='Rotation'
+              value={`${selectedNode.rotation.x.toFixed(2)}, ${selectedNode.rotation.y.toFixed(2)}, ${selectedNode.rotation.z.toFixed(2)}`}
+            />
+          )}
+          {selectedNode.scale && (
+            <InfoRow
+              label='Scale'
+              value={`${selectedNode.scale.x.toFixed(2)}, ${selectedNode.scale.y.toFixed(2)}, ${selectedNode.scale.z.toFixed(2)}`}
+            />
+          )}
+          {selectedNode.visible !== undefined && (
+            <InfoRow label='Visible' value={selectedNode.visible.toString()} />
+          )}
         </div>
       )}
     </div>
   )
 }
 
-function renderHierarchy(nodes, depth = 0) {
+function InfoRow({ label, value }) {
+  return (
+    <div className='ahierarchy-info-row'>
+      <div className='ahierarchy-info-row-label'>{label}</div>
+      <div className='ahierarchy-info-row-value'>{value}</div>
+    </div>
+  )
+}
+
+function renderHierarchy(nodes, depth = 0, selectedNode, setSelectedNode) {
   return nodes.map(node => {
     const hasChildren = node.children && node.children.length > 0
+    const isSelected = selectedNode?.id === node.id
+    
     return (
       <div key={node.id}>
-        <div className={cls('ahierarchy-item', { 'ahierarchy-item-indent': depth > 0 })} style={{ marginLeft: depth * 20 }}>
+        <div 
+          className={cls('ahierarchy-item', { 
+            'ahierarchy-item-indent': depth > 0,
+            'selected': isSelected 
+          })} 
+          style={{ marginLeft: depth * 20 }}
+          onClick={() => setSelectedNode(node)}
+        >
           <LayersIcon size={14} />
           <span>{node.id || 'Unnamed'}</span>
         </div>
-        {hasChildren && renderHierarchy(node.children, depth + 1)}
+        {hasChildren && renderHierarchy(node.children, depth + 1, selectedNode, setSelectedNode)}
       </div>
     )
   })
