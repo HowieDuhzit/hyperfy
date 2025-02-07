@@ -91,12 +91,16 @@ export function AppPane({ world, app }) {
           border-bottom: 1px solid rgba(255, 255, 255, 0.05);
           display: flex;
           padding: 0 5px 0 16px;
+          overflow-x: auto;
           &-tab {
             display: flex;
             align-items: center;
             justify-content: center;
-            margin: 0 16px 0 0;
+            padding: 0 12px;
             cursor: pointer;
+            white-space: nowrap;
+            height: 100%;
+            
             span {
               font-size: 14px;
               color: #595959;
@@ -108,13 +112,17 @@ export function AppPane({ world, app }) {
                 color: white;
               }
             }
+            &:hover:not(.selected) span {
+              color: #888;
+            }
           }
           &-gap {
             flex: 1;
+            min-width: 8px;
           }
           &-close {
             color: #515151;
-            width: 30px;
+            min-width: 30px;
             height: 40px;
             display: flex;
             align-items: center;
