@@ -1,7 +1,7 @@
 import 'dotenv-flow/config'
 import fs from 'fs-extra'
 import path from 'path'
-import { fork } from 'child_process'
+import { fork, execSync } from 'child_process'
 import * as esbuild from 'esbuild'
 import { fileURLToPath } from 'url'
 

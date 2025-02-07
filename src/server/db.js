@@ -128,4 +128,41 @@ const migrations = [
       }
     }
   },
+  // blueprint.config -> blueprint.props
+  async db => {
+    const blueprints = await db('blueprints')
+    for (const blueprint of blueprints) {
+      const data = JSON.parse(blueprint.data)
+      data.props = data.config
+      delete data.config
+      await db('blueprints')
+        .where('id', blueprint.id)
+        .update({
+          data: JSON.stringify(data),
+        })
+    }
+  },
+  // add blueprint.public and blueprint.locked fields
+  async db => {
+    const blueprints = await db('blueprints')
+    for (const blueprint of blueprints) {
+      const data = JSON.parse(blueprint.data)
+      let changed
+      if (data.public === undefined) {
+        data.public = false
+        changed = true
+      }
+      if (data.locked === undefined) {
+        data.locked = false
+        changed = true
+      }
+      if (changed) {
+        await db('blueprints')
+          .where('id', blueprint.id)
+          .update({
+            data: JSON.stringify(data),
+          })
+      }
+    }
+  },
 ]

@@ -78,7 +78,7 @@ export class ClientEnvironment extends System {
     // ground
     const glb = await this.world.loader.load('model', '/base-environment.glb')
     const root = glb.toNodes()
-    root.activate({ world: this.world, physics: true, label: 'base-environment' })
+    root.activate({ world: this.world, label: 'base-environment' })
   }
 
   addSky(node) {
@@ -112,10 +112,10 @@ export class ClientEnvironment extends System {
     }
 
     const node = this.skys[this.skys.length - 1]?.node
-    const bgUrl = node?.bg || defaults.bg
-    const hdrUrl = node?.hdr || defaults.hdr
-    const sunDirection = node?.sunDirection?.isVector3 ? node.sunDirection : defaults.sunDirection
-    const sunIntensity = isNumber(node?.sunIntensity) ? node.sunIntensity : defaults.sunIntensity
+    const bgUrl = node?._bg || defaults.bg
+    const hdrUrl = node?._hdr || defaults.hdr
+    const sunDirection = node?._sunDirection || defaults.sunDirection
+    const sunIntensity = isNumber(node?._sunIntensity) ? node._sunIntensity : defaults.sunIntensity
 
     const n = ++this.skyN
     const bgTexture = await this.world.loader.load('texture', bgUrl)

@@ -268,6 +268,15 @@ export class Physics extends System {
     this.handles.set(actor.ptr, handle)
     this.scene.addActor(actor)
     return {
+      move: matrix => {
+        if (this.ignoreSetGlobalPose) {
+          const isDynamic = !actor.getRigidBodyFlags?.().isSet(PHYSX.PxRigidBodyFlagEnum.eKINEMATIC)
+          if (isDynamic) return
+          return
+        }
+        matrix.toPxTransform(this.transform)
+        actor.setGlobalPose(this.transform)
+      },
       snap: pose => {
         actor.setGlobalPose(pose)
         handle.interpolation.prev.position.copy(pose.p)
@@ -361,28 +370,6 @@ export class Physics extends System {
     this.world.stage.clean()
     this.ignoreSetGlobalPose = false
   }
-
-  // getInterpolatedTransform(actorPtr, vec3, quat) {
-  //   const item = this.tracking.get(actorPtr)
-  //   if (!item) return false
-  //   vec3.copy(item.curr.position)
-  //   quat.copy(item.curr.quaternion)
-  //   return true
-  // }
-
-  setGlobalPose(actor, matrix) {
-    // ignore interpolation loopback commits for dynamic actors
-    if (this.ignoreSetGlobalPose) {
-      const isDynamic = !actor.getRigidBodyFlags?.().isSet(PHYSX.PxRigidBodyFlagEnum.eKINEMATIC)
-      if (isDynamic) return
-    }
-    matrix.toPxTransform(this.transform)
-    actor.setGlobalPose(this.transform, true)
-  }
-
-  // lateUpdate() {
-  //   // ...
-  // }
 
   raycast(origin, direction, maxDistance, layerMask) {
     origin = origin.toPxVec3(this._pv1)
