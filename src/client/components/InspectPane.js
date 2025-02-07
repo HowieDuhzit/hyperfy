@@ -16,8 +16,7 @@ import {
   LayersIcon,
   CubeIcon,
   AnchorIcon,
-  ChevronRightIcon,
-  ChevronDownIcon,
+  FolderIcon,
 } from 'lucide-react'
 
 import { hashFile } from '../../core/utils-client'
@@ -424,7 +423,8 @@ function AppPaneEdit({ world, app, blueprint }) {
 
 function AppPaneHierarchy({ app }) {
   const [selectedNode, setSelectedNode] = useState(null)
-  const [expandedNodes, setExpandedNodes] = useState(new Set(['root']))
+  
+  // Get the scene root node
   const rootNode = app?.scene?.root || app?.root
 
   useEffect(() => {
@@ -433,63 +433,19 @@ function AppPaneHierarchy({ app }) {
     }
   }, [rootNode])
 
-  const toggleExpand = (nodeId, e) => {
-    e.stopPropagation()
-    setExpandedNodes(prev => {
-      const next = new Set(prev)
-      if (next.has(nodeId)) {
-        next.delete(nodeId)
-      } else {
-        next.add(nodeId)
-      }
-      return next
-    })
+  // Helper function to safely get vector string
+  const getVectorString = (vec) => {
+    if (!vec || typeof vec.x !== 'number') return null
+    return `${vec.x.toFixed(2)}, ${vec.y.toFixed(2)}, ${vec.z.toFixed(2)}`
   }
 
-  const getNodeIcon = (node) => {
-    if (node.id === 'root') return <LayersIcon size={14} />
-    if (node.type === 'rigidbody') return <AnchorIcon size={14} />
-    if (node.type === 'collider') return <BoxIcon size={14} />
-    if (node.type === 'mesh') return <CubeIcon size={14} />
-    return <LayersIcon size={14} />
-  }
-
-  const renderHierarchy = (nodes, depth = 0) => {
-    if (!Array.isArray(nodes)) return null
-    
-    return nodes.map(node => {
-      if (!node) return null
-      
-      const children = node.children || []
-      const hasChildren = Array.isArray(children) && children.length > 0
-      const isSelected = selectedNode?.id === node.id
-      const nodeId = node.id || node.uuid
-      const isExpanded = expandedNodes.has(nodeId)
-      const displayName = nodeId === 'root' ? 'Root' : (node.id || node.name || 'Unnamed')
-      
-      return (
-        <div key={nodeId || Math.random()}>
-          <div 
-            className={cls('ahierarchy-item', { 
-              'ahierarchy-item-indent': depth > 0,
-              'selected': isSelected 
-            })} 
-            style={{ marginLeft: depth * 20 }}
-          >
-            {hasChildren && (
-              <div className='ahierarchy-item-toggle' onClick={(e) => toggleExpand(nodeId, e)}>
-                {isExpanded ? <ChevronDownIcon size={14} /> : <ChevronRightIcon size={14} />}
-              </div>
-            )}
-            <div className='ahierarchy-item-content' onClick={() => setSelectedNode(node)}>
-              {getNodeIcon(node)}
-              <span>{displayName}</span>
-            </div>
-          </div>
-          {hasChildren && isExpanded && renderHierarchy(children, depth + 1)}
-        </div>
-      )
-    })
+  // Helper function to safely check if a property exists
+  const hasProperty = (obj, prop) => {
+    try {
+      return obj && typeof obj[prop] !== 'undefined'
+    } catch (err) {
+      return false
+    }
   }
 
   return (
@@ -513,48 +469,26 @@ function AppPaneHierarchy({ app }) {
           align-items: center;
           padding: 4px 0;
           font-size: 14px;
-          
-          &-toggle {
-            width: 20px;
-            height: 20px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            color: rgba(255, 255, 255, 0.5);
-            &:hover {
-              color: #00a7ff;
-            }
+          cursor: pointer;
+          &:hover {
+            color: #00a7ff;
           }
-          
-          &-content {
-            flex: 1;
-            display: flex;
-            align-items: center;
-            cursor: pointer;
-            padding: 2px 4px;
-            border-radius: 4px;
-            
-            &:hover {
-              color: #00a7ff;
-            }
-            
-            svg {
-              margin-right: 8px;
-              opacity: 0.5;
-              flex-shrink: 0;
-            }
-            
-            span {
-              white-space: nowrap;
-              overflow: hidden;
-              text-overflow: ellipsis;
-            }
-          }
-          
-          &.selected .ahierarchy-item-content {
+          &.selected {
             color: #00a7ff;
             background: rgba(0, 167, 255, 0.1);
+          }
+          svg {
+            margin-right: 8px;
+            opacity: 0.5;
+            flex-shrink: 0;
+          }
+          span {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+          }
+          &-indent {
+            margin-left: 20px;
           }
         }
         .ahierarchy-empty {
@@ -588,7 +522,7 @@ function AppPaneHierarchy({ app }) {
     >
       <div className='ahierarchy-tree'>
         {rootNode ? (
-          renderHierarchy([rootNode], 0)
+          renderHierarchy([rootNode], 0, selectedNode, setSelectedNode)
         ) : (
           <div className='ahierarchy-empty'>
             <LayersIcon size={24} />
@@ -664,6 +598,50 @@ function InfoRow({ label, value }) {
       <div className='ahierarchy-info-row-value'>{value}</div>
     </div>
   )
+}
+
+function renderHierarchy(nodes, depth = 0, selectedNode, setSelectedNode) {
+  if (!Array.isArray(nodes)) return null
+  
+  return nodes.map(node => {
+    if (!node) return null
+    
+    // Safely get children
+    const children = node.children || []
+    const hasChildren = Array.isArray(children) && children.length > 0
+    const isSelected = selectedNode?.id === node.id
+    
+    // Get appropriate icon and name based on node type
+    const getNodeIcon = (node) => {
+      if (node.type === 'mesh') return <CubeIcon size={14} />
+      if (node.type === 'collider') return <BoxIcon size={14} />
+      if (node.type === 'rigidbody') return <AnchorIcon size={14} />
+      if (hasChildren) return <FolderIcon size={14} />
+      return <LayersIcon size={14} />
+    }
+
+    const getNodeName = (node) => {
+      if (depth === 0) return 'Root'
+      return node.id || node.name || 'Unnamed'
+    }
+    
+    return (
+      <div key={node.id || node.uuid || Math.random()}>
+        <div 
+          className={cls('ahierarchy-item', { 
+            'ahierarchy-item-indent': depth > 0,
+            'selected': isSelected 
+          })} 
+          style={{ marginLeft: depth * 20 }}
+          onClick={() => setSelectedNode(node)}
+        >
+          {getNodeIcon(node)}
+          <span>{getNodeName(node)}</span>
+        </div>
+        {hasChildren && renderHierarchy(children, depth + 1, selectedNode, setSelectedNode)}
+      </div>
+    )
+  })
 }
 
 function PlayerPane({ world, player }) {
