@@ -419,6 +419,16 @@ function AppPaneEdit({ world, app, blueprint }) {
 function AppPaneHierarchy({ app }) {
   const [selectedNode, setSelectedNode] = useState(null)
 
+  // Get root node from app
+  const rootNode = app.root
+  
+  useEffect(() => {
+    // Set initial selection to root node
+    if (rootNode && !selectedNode) {
+      setSelectedNode(rootNode)
+    }
+  }, [rootNode])
+
   return (
     <div
       className='ahierarchy noscrollbar'
@@ -479,8 +489,8 @@ function AppPaneHierarchy({ app }) {
       `}
     >
       <div className='ahierarchy-tree'>
-        {app.nodes?.length > 0 ? (
-          renderHierarchy(app.nodes, 0, selectedNode, setSelectedNode)
+        {rootNode ? (
+          renderHierarchy([rootNode], 0, selectedNode, setSelectedNode)
         ) : (
           <div className='ahierarchy-empty'>
             <LayersIcon size={24} />
@@ -514,6 +524,17 @@ function AppPaneHierarchy({ app }) {
           {selectedNode.visible !== undefined && (
             <InfoRow label='Visible' value={selectedNode.visible.toString()} />
           )}
+          {selectedNode.material && (
+            <>
+              <InfoRow label='Material' value={selectedNode.material.type || 'Standard'} />
+              {selectedNode.material.color && (
+                <InfoRow label='Color' value={`#${selectedNode.material.color.getHexString()}`} />
+              )}
+            </>
+          )}
+          {selectedNode.geometry && (
+            <InfoRow label='Geometry' value={selectedNode.geometry.type || 'Custom'} />
+          )}
         </div>
       )}
     </div>
@@ -531,11 +552,13 @@ function InfoRow({ label, value }) {
 
 function renderHierarchy(nodes, depth = 0, selectedNode, setSelectedNode) {
   return nodes.map(node => {
-    const hasChildren = node.children && node.children.length > 0
+    // Get children from the node's children property
+    const children = node.children || []
+    const hasChildren = children.length > 0
     const isSelected = selectedNode?.id === node.id
     
     return (
-      <div key={node.id}>
+      <div key={node.id || Math.random()}>
         <div 
           className={cls('ahierarchy-item', { 
             'ahierarchy-item-indent': depth > 0,
@@ -545,9 +568,9 @@ function renderHierarchy(nodes, depth = 0, selectedNode, setSelectedNode) {
           onClick={() => setSelectedNode(node)}
         >
           <LayersIcon size={14} />
-          <span>{node.id || 'Unnamed'}</span>
+          <span>{node.id || node.name || 'Unnamed'}</span>
         </div>
-        {hasChildren && renderHierarchy(node.children, depth + 1, selectedNode, setSelectedNode)}
+        {hasChildren && renderHierarchy(children, depth + 1, selectedNode, setSelectedNode)}
       </div>
     )
   })
