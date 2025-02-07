@@ -14,10 +14,6 @@ import {
   ShuffleIcon,
   XIcon,
   LayersIcon,
-  ShieldIcon,
-  CubeIcon,
-  SunIcon,
-  CameraIcon,
 } from 'lucide-react'
 
 import { hashFile } from '../../core/utils-client'
@@ -434,31 +430,6 @@ function AppPaneHierarchy({ app }) {
     }
   }, [rootNode])
 
-  // Helper function to get appropriate icon based on node type
-  const getNodeIcon = (node) => {
-    if (!node) return <LayersIcon size={14} />
-    
-    // Check node properties to determine type
-    if (node.isRigidBody || node.type === 'RigidBody') {
-      return <BoxIcon size={14} />
-    }
-    if (node.isCollider || node.type === 'Collider') {
-      return <ShieldIcon size={14} />  
-    }
-    if (node.isMesh || node.type === 'Mesh') {
-      return <CubeIcon size={14} />
-    }
-    if (node.isLight || node.type === 'Light') {
-      return <SunIcon size={14} />
-    }
-    if (node.isCamera || node.type === 'Camera') {
-      return <CameraIcon size={14} />
-    }
-    
-    // Default icon for other types
-    return <LayersIcon size={14} />
-  }
-
   // Helper function to safely get vector string
   const getVectorString = (vec) => {
     if (!vec || typeof vec.x !== 'number') return null
@@ -548,8 +519,7 @@ function AppPaneHierarchy({ app }) {
     >
       <div className='ahierarchy-tree'>
         {rootNode ? (
-          // Start with root's children instead of root itself
-          renderHierarchy(rootNode.children || [], 0, selectedNode, setSelectedNode, getNodeIcon)
+          renderHierarchy([rootNode], 0, selectedNode, setSelectedNode)
         ) : (
           <div className='ahierarchy-empty'>
             <LayersIcon size={24} />
@@ -627,12 +597,18 @@ function InfoRow({ label, value }) {
   )
 }
 
-function renderHierarchy(nodes, depth = 0, selectedNode, setSelectedNode, getNodeIcon) {
+function renderHierarchy(nodes, depth = 0, selectedNode, setSelectedNode) {
   if (!Array.isArray(nodes)) return null
   
   return nodes.map(node => {
     if (!node) return null
     
+    // Skip the root node but show its children
+    if (depth === 0 && (node.id === '$root' || node.name === '$root')) {
+      return renderHierarchy(node.children || [], depth, selectedNode, setSelectedNode)
+    }
+    
+    // Safely get children
     const children = node.children || []
     const hasChildren = Array.isArray(children) && children.length > 0
     const isSelected = selectedNode?.id === node.id
@@ -647,10 +623,10 @@ function renderHierarchy(nodes, depth = 0, selectedNode, setSelectedNode, getNod
           style={{ marginLeft: depth * 20 }}
           onClick={() => setSelectedNode(node)}
         >
-          {getNodeIcon(node)}
+          <LayersIcon size={14} />
           <span>{node.id || node.name || 'Unnamed'}</span>
         </div>
-        {hasChildren && renderHierarchy(children, depth + 1, selectedNode, setSelectedNode, getNodeIcon)}
+        {hasChildren && renderHierarchy(children, depth + 1, selectedNode, setSelectedNode)}
       </div>
     )
   })
@@ -821,12 +797,12 @@ const kinds = {
   },
 }
 
-function FieldFile({ world, field, value, modify }) {
+function FieldFile({ world, field, value, onChange }) {
   const kind = kinds[field.kind]
   if (!kind) return null
   return (
     <FieldWithLabel label={field.label}>
-      <InputFile world={world} kind={field.kind} value={value} onChange={value => modify(field.key, value)} />
+      <InputFile world={world} kind={field.kind} value={value} onChange={value => onChange(value)} />
     </FieldWithLabel>
   )
 }
