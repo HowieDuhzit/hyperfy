@@ -48,11 +48,11 @@ export function AppsPane({ world, close }) {
         display: flex;
         flex-direction: column;
         .apane-head {
-          height: 40px;
+          height: 50px;
           border-bottom: 1px solid rgba(255, 255, 255, 0.05);
           display: flex;
           align-items: center;
-          padding: 0 5px 0 10px;
+          padding: 0 13px 0 20px;
           &-title {
             padding-left: 7px;
             font-weight: 500;

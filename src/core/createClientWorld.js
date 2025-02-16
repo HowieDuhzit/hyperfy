@@ -1,6 +1,7 @@
 import { World } from './World'
 
 import { Client } from './systems/Client'
+import { ClientPrefs } from './systems/ClientPrefs'
 import { ClientControls } from './systems/ClientControls'
 import { ClientNetwork } from './systems/ClientNetwork'
 import { ClientLoader } from './systems/ClientLoader'
@@ -19,6 +20,7 @@ import { XR } from './systems/XR'
 export function createClientWorld() {
   const world = new World()
   world.register('client', Client)
+  world.register('prefs', ClientPrefs)
   world.register('controls', ClientControls)
   world.register('network', ClientNetwork)
   world.register('loader', ClientLoader)

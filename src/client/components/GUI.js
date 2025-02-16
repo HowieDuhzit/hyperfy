@@ -27,6 +27,7 @@ import { cls } from '../utils'
 import { hasRole, uuid } from '../../core/utils'
 import { ControlPriorities } from '../../core/extras/ControlPriorities'
 import { AppsPane } from './AppsPane'
+import { SettingsPane } from './SettingsPane'
 
 export function GUI({ world }) {
   const [ref, width, height] = useElemSize()
@@ -51,6 +52,7 @@ function Content({ world, width, height }) {
   const [code, setCode] = useState(false)
   const [avatar, setAvatar] = useState(null)
   const [disconnected, setDisconnected] = useState(false)
+  const [settings, setSettings] = useState(false)
   const [apps, setApps] = useState(false)
   useEffect(() => {
     world.on('ready', setReady)
@@ -80,16 +82,24 @@ function Content({ world, width, height }) {
       {inspect && code && <CodePane key={`code-${inspect.data.id}`} world={world} entity={inspect} />}
       {avatar && <AvatarPane key={avatar.hash} world={world} info={avatar} />}
       {disconnected && <Disconnected />}
-      {!ready && <LoadingOverlay />}
       <Reticle world={world} />
-      {ready && <Side world={world} player={player} toggleApps={() => setApps(!apps)} />}
       {<Toast world={world} />}
+      {ready && (
+        <Side
+          world={world}
+          player={player}
+          toggleSettings={() => setSettings(!settings)}
+          toggleApps={() => setApps(!apps)}
+        />
+      )}
+      {settings && <SettingsPane world={world} player={player} close={() => setSettings(false)} />}
       {apps && <AppsPane world={world} close={() => setApps(false)} />}
+      {!ready && <LoadingOverlay />}
     </div>
   )
 }
 
-function Side({ world, player, toggleApps }) {
+function Side({ world, player, toggleSettings, toggleApps }) {
   const touch = useMemo(() => navigator.userAgent.match(/OculusBrowser|iPhone|iPad|iPod|Android/i), [])
   const inputRef = useRef()
   const [msg, setMsg] = useState('')
@@ -241,7 +251,7 @@ function Side({ world, player, toggleApps }) {
       <Messages world={world} active={chat} touch={touch} />
       <div className='bar'>
         <div className={cls('bar-btns', { active: !chat })}>
-          <div className={cls('bar-btn', { darken: world.xr.supportsVR || canBuild })} onClick={() => setChat(true)}>
+          <div className='bar-btn darken' onClick={() => setChat(true)}>
             <MessageCircleMoreIcon size={20} />
           </div>
           {world.xr.supportsVR && (
@@ -251,10 +261,13 @@ function Side({ world, player, toggleApps }) {
           )}
           {/* <div className='bar-btn' onClick={null}>
             <MicIcon size={20} />
-          </div>
-          <div className='bar-btn' onClick={null}>
+          </div> */}
+          {/* <div className='bar-btn' onClick={null}>
             <StoreIcon size={20} />
           </div> */}
+          <div className='bar-btn' onClick={toggleSettings}>
+            <SettingsIcon size={20} />
+          </div>
           {canBuild && (
             <div className='bar-btn' onClick={toggleApps}>
               <ZapIcon size={20} />
