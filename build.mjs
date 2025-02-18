@@ -36,13 +36,25 @@ const clientHtmlDest = path.join(rootDir, 'build/public/index.html')
     jsx: 'automatic',
     jsxImportSource: '@firebolt-dev/jsx',
     define: {
-      // 'process.env.NODE_ENV': '"development"',
+      'process.env.NODE_ENV': JSON.stringify(dev ? 'development' : 'production'),
+      'import.meta.url': 'window.location.href',
+      'import.meta.env': JSON.stringify({
+        MODE: dev ? 'development' : 'production',
+        DEV: dev,
+        PROD: !dev,
+        ...Object.fromEntries(
+          Object.entries(process.env).filter(([key]) => key.startsWith('PUBLIC_'))
+        )
+      }),
+      'global': 'window'
     },
     loader: {
       '.js': 'jsx',
+      '.mjs': 'jsx'
     },
     alias: {
-      react: 'react', // always use our own local react (jsx)
+      react: 'react',
+      'react-dom': 'react-dom'
     },
     plugins: [
       {

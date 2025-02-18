@@ -12,6 +12,11 @@ const names = [
   'entityModified',
   'entityEvent',
   'entityRemoved',
+  'fileList',
+  'fileError',
+  'fileDownloadStart',
+  'fileDownloadChunk',
+  'fileDownloadComplete',
   'playerTeleport',
 ]
 

@@ -18,7 +18,9 @@ import moment from 'moment'
 import { InspectPane } from './InspectPane'
 import { CodePane } from './CodePane'
 import { AvatarPane } from './AvatarPane'
+import { HyperFone } from './HyperFone'
 import { useElemSize } from './useElemSize'
+import { AuthProvider } from './AuthProvider'
 import { MouseLeftIcon } from './MouseLeftIcon'
 import { MouseRightIcon } from './MouseRightIcon'
 import { MouseWheelIcon } from './MouseWheelIcon'
@@ -54,6 +56,7 @@ function Content({ world, width, height }) {
   const [disconnected, setDisconnected] = useState(false)
   const [settings, setSettings] = useState(false)
   const [apps, setApps] = useState(false)
+
   useEffect(() => {
     world.on('ready', setReady)
     world.on('player', setPlayer)
@@ -70,14 +73,43 @@ function Content({ world, width, height }) {
       world.off('disconnect', setDisconnected)
     }
   }, [])
+
   return (
-    <div
-      className='gui'
-      css={css`
-        position: absolute;
-        inset: 0;
-      `}
-    >
+    <>
+      <AuthProvider>
+        <HyperFone world={world} />
+      </AuthProvider>
+
+      {!chat && (
+        <ChatBtn
+          css={css`
+            position: absolute;
+            left: 20px;
+            bottom: 20px;
+          `}
+          world={world}
+          onClick={() => setChat(true)}
+        />
+      )}
+      {chat && (
+        <ChatBox
+          css={css`
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            width: 100%;
+            max-width: 400px;
+            @media all and (max-width: 440px) {
+              right: 20px;
+              width: inherit;
+            }
+          `}
+          world={world}
+          onClose={() => setChat(false)}
+        />
+      )}
+
+      {context && <ContextWheel key={context.id} {...context} />}
       {inspect && <InspectPane key={`inspect-${inspect.data.id}`} world={world} entity={inspect} />}
       {inspect && code && <CodePane key={`code-${inspect.data.id}`} world={world} entity={inspect} />}
       {avatar && <AvatarPane key={avatar.hash} world={world} info={avatar} />}

@@ -12,11 +12,16 @@ function App() {
   const uiRef = useRef()
   const world = useMemo(() => createClientWorld(), [])
   useEffect(() => {
+    console.log('Starting world initialization...');
     const viewport = viewportRef.current
     const ui = uiRef.current
     const wsUrl = process.env.PUBLIC_WS_URL
     const apiUrl = process.env.PUBLIC_API_URL
-    world.init({ viewport, ui, wsUrl, apiUrl, loadPhysX })
+    console.log('Config:', { wsUrl, apiUrl });
+    world.init({ viewport, ui, wsUrl, apiUrl, loadPhysX }).catch(err => {
+      console.error('World initialization failed:', err);
+    });
+    console.log('World initialization started');
   }, [])
   useEffect(() => {
     const ui = uiRef.current
