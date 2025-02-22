@@ -45,6 +45,8 @@ export function GUI({ world }) {
 }
 
 function Content({ world, width, height }) {
+  const { connection } = useConnection()
+  const wallet = useWallet()
   const small = width < 600
   const [ready, setReady] = useState(false)
   const [player, setPlayer] = useState(() => world.entities.player)
@@ -70,6 +72,15 @@ function Content({ world, width, height }) {
       world.off('disconnect', setDisconnected)
     }
   }, [])
+
+  useEffect(() => {
+    if (!wallet || !connection) return
+    if (!world.solana.initialized) {
+      world.solana.wallet = wallet
+      world.solana.connection = connection
+    }
+  }, [wallet, connection])
+
   return (
     <div
       className='gui'
