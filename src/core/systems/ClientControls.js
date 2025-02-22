@@ -315,6 +315,7 @@ export class ClientControls extends System {
       e.preventDefault()
     }
     const prop = codeToProp[code]
+    const text = e.key
     this.buttonsDown.add(prop)
     for (const control of this.controls) {
       const button = control.entries[prop]
@@ -324,6 +325,8 @@ export class ClientControls extends System {
         button.onPress?.()
         if (button.capture) break
       }
+      const capture = control.onButtonPress?.(prop, text)
+      if (capture) break
     }
   }
 

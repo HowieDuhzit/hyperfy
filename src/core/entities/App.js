@@ -155,6 +155,9 @@ export class App extends Entity {
     // abort fetch's etc
     this.abortController?.abort()
     this.abortController = null
+    // cancel any control
+    this.control?.release()
+    this.control = null
     // clear fields
     this.onFields?.([])
   }

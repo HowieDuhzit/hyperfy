@@ -973,7 +973,11 @@ class PointerState {
     for (let j = oldPath.length - 1; j >= i; j--) {
       if (oldPath[j].onPointerLeave) {
         this.event.set(PointerEvents.LEAVE)
-        oldPath[j].onPointerLeave?.(this.event)
+        try {
+          oldPath[j].onPointerLeave?.(this.event)
+        } catch (err) {
+          console.error(err)
+        }
         // if (this.event._propagationStopped) break
       }
       this.activePath.delete(oldPath[j])
@@ -983,7 +987,11 @@ class PointerState {
     for (let j = i; j < newPath.length; j++) {
       if (newPath[j].onPointerEnter) {
         this.event.set(PointerEvents.ENTER)
-        newPath[j].onPointerEnter?.(this.event)
+        try {
+          newPath[j].onPointerEnter?.(this.event)
+        } catch (err) {
+          console.error(err)
+        }
         if (this.event._propagationStopped) break
       }
       this.activePath.add(newPath[j])
@@ -1010,7 +1018,11 @@ class PointerState {
         const node = newPath[i]
         if (node.onPointerDown) {
           this.event.set(PointerEvents.DOWN)
-          node.onPointerDown(this.event)
+          try {
+            node.onPointerDown(this.event)
+          } catch (err) {
+            console.error(err)
+          }
           this.pressedNodes.add(node)
           if (this.event._propagationStopped) break
         }
@@ -1022,7 +1034,11 @@ class PointerState {
       for (const node of this.pressedNodes) {
         if (node.onPointerUp) {
           this.event.set(PointerEvents.UP)
-          node.onPointerUp(this.event)
+          try {
+            node.onPointerUp(this.event)
+          } catch (err) {
+            console.error(err)
+          }
           if (this.event._propagationStopped) break
         }
       }
