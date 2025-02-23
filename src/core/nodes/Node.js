@@ -184,6 +184,8 @@ export class Node {
       this.deactivate()
     } else if (this._active && this.parent?.mounted) {
       this.activate(this.parent.ctx)
+    } else if (this._active && !this.parent) {
+      this.activate(this.ctx)
     }
   }
 
