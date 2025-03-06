@@ -271,6 +271,13 @@ export class PlayerLocal extends Entity {
     this.control.camera.position.copy(this.cam.position)
     this.control.camera.quaternion.copy(this.cam.quaternion)
     this.control.camera.zoom = this.cam.zoom
+    this.control.mouseLeft.onPress = () => {
+      // pointer lock requires user-gesture in safari
+      // so this can't be done during update cycle
+      if (!this.control.pointer.locked) {
+        this.control.pointer.lock()
+      }
+    }
     // this.control.setActions([{ type: 'space', label: 'Jump / Double-Jump' }])
   }
 
@@ -815,11 +822,6 @@ export class PlayerLocal extends Entity {
         this.world.network.send('entityModified', data)
       }
       this.lastSendAt = 0
-    }
-
-    // left-click lock pointer (only if not in build mode)
-    if (!this.control.pointer.locked && this.control.mouseLeft.pressed && !this.world.builder.enabled) {
-      this.control.pointer.lock()
     }
 
     // effect duration
