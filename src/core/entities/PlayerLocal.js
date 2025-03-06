@@ -271,13 +271,6 @@ export class PlayerLocal extends Entity {
     this.control.camera.position.copy(this.cam.position)
     this.control.camera.quaternion.copy(this.cam.quaternion)
     this.control.camera.zoom = this.cam.zoom
-    this.control.mouseLeft.onPress = () => {
-      // pointer lock requires user-gesture in safari
-      // so this can't be done during update cycle
-      if (!this.control.pointer.locked) {
-        this.control.pointer.lock()
-      }
-    }
     // this.control.setActions([{ type: 'space', label: 'Jump / Double-Jump' }])
   }
 

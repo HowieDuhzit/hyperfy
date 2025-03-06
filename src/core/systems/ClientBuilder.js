@@ -380,6 +380,15 @@ export class ClientBuilder extends System {
 
   start() {
     this.control = this.world.controls.bind({ priority: ControlPriorities.BUILDER })
+    this.control.mouseLeft.onPress = () => {
+      // pointer lock requires user-gesture in safari
+      // so this can't be done during update cycle
+      if (!this.control.pointer.locked) {
+        this.control.pointer.lock()
+        this.justPointerLocked = true
+        return true // capture
+      }
+    }
     
     // Now that the world is fully initialized, we can create and add gizmos
     if (this.world.scene) {
@@ -521,7 +530,7 @@ export class ClientBuilder extends System {
     }
     
     // grab with left mouse button
-    if (this.control.mouseLeft.pressed && !this.selected) {
+    if (!this.justPointerLocked && this.control.mouseLeft.pressed && !this.selected) {
       // Make sure pointer is unlocked in build mode
       if (this.control.pointer.locked && this.enabled) {
         this.control.pointer.unlock()
@@ -536,12 +545,15 @@ export class ClientBuilder extends System {
     }
     
     // place with left mouse button
-    else if (this.control.mouseLeft.pressed && this.selected) {
+    else if (
+      (!this.control.pointer.locked && this.selected) ||
+      (this.control.mouseLeft.pressed && this.selected)
+    ) {
       this.select(null)
     }
     
     // duplicate with R key (was right mouse button)
-    if (this.control.keyR.pressed) {
+    if (!this.justPointerLocked && this.control.keyR.pressed) {
       const entity = this.selected || this.getEntityAtPointer()
       if (entity?.isApp) {
         let blueprintId = entity.data.blueprint
@@ -648,6 +660,10 @@ export class ClientBuilder extends System {
       
       // Update highlight and gizmos position
       this.updateHighlight()
+    }
+
+    if (this.justPointerLocked) {
+      this.justPointerLocked = false
     }
   }
 
