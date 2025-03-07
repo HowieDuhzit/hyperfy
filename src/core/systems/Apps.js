@@ -142,6 +142,12 @@ export class Apps extends System {
           return hit.proxy
         })
       },
+      get(entity, key) {
+        return world.storage?.get(key)
+      },
+      set(entity, key, value) {
+        world.storage?.set(key, value)
+      },
     }
   }
 

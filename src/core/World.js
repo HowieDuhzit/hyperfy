@@ -50,6 +50,7 @@ export class World extends EventEmitter {
   }
 
   async init(options) {
+    this.storage = options.storage
     for (const system of this.systems) {
       await system.init(options)
     }
