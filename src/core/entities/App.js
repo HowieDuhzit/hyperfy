@@ -472,7 +472,7 @@ export class App extends Entity {
           set: (target, prop, value) => {
             // handle setter fns
             if (prop in setterFns) {
-              appProps[setterFns[prop]](entity, value)
+              appApi[setterFns[prop]](entity, value)
               return true
             }
             // also inherit app root node
