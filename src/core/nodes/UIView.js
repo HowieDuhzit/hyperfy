@@ -3,7 +3,7 @@ import * as THREE from '../extras/three'
 import { isNumber, isString } from 'lodash-es'
 
 import { Node } from './Node'
-import { fillRoundRect } from '../extras/fillRoundRect'
+import { fillRoundRect } from '../extras/roundRect'
 import {
   AlignItems,
   AlignContent,
@@ -81,18 +81,14 @@ export class UIView extends Node {
       const insetTop = top + inset
       const insetWidth = width - inset * 2
       const insetHeight = height - inset * 2
-      ctx.fillStyle = this._backgroundColor
-      if (this.borderRadius) {
-        fillRoundRect(ctx, insetLeft, insetTop, insetWidth, insetHeight, radius)
-      } else {
-        ctx.fillRect(insetLeft, insetTop, insetWidth, insetHeight)
-      }
+      fillRoundRect(ctx, insetLeft, insetTop, insetWidth, insetHeight, radius, this._backgroundColor)
     }
     if (this._borderWidth && this._borderColor) {
       const radius = this._borderRadius * this.ui._res
       const thickness = this._borderWidth * this.ui._res
       ctx.strokeStyle = this._borderColor
       ctx.lineWidth = thickness
+      // todo: migrate to new roundRect { strokeRoundRect }
       if (this._borderRadius) {
         borderRoundRect(ctx, left, top, width, height, radius, thickness)
       } else {
