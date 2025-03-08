@@ -461,28 +461,22 @@ export class ClientBuilder extends System {
     if (!this.enabled) {
       return
     }
-    
-    // Create and add gizmos if they don't exist yet but scene does
-    if (!this.gizmos && this.world.scene) {
-      console.log('Creating gizmos in update because they were not created earlier');
-      this.gizmos = new THREE.Object3D();
-      this.createGizmos();
-      this.world.scene.add(this.gizmos);
-      this.gizmos.visible = false;
-    }
-    
-    // Cycle gizmo mode with G key
-    if (this.control.keyG.pressed) {
-      this.cycleGizmoMode()
-    }
-    
-    // inspect with right mouse button (was R key)
-    if (this.control.mouseRight.pressed) {
-      const entity = this.getEntityAtPointer()
+    // inspect in pointer-lock
+    if (!this.selected && this.control.keyR.pressed) {
+      const entity = this.getEntityAtReticle()
       if (entity) {
         this.select(null)
         this.world.emit('inspect', entity)
         return // Add return to prevent duplicate handling
+      }
+    }
+    // inspect out of pointer-lock
+    if (!this.selected && !this.control.pointer.locked && this.control.mouseRight.pressed) {
+      const entity = this.getEntityAtPointer()
+      if (entity) {
+        this.select(null)
+        this.control.pointer.unlock()
+        this.world.emit('inspect', entity)
       }
     }
     
@@ -809,6 +803,16 @@ export class ClientBuilder extends System {
 
   getEntityAtReticle() {
     const hits = this.world.stage.raycastReticle()
+    let entity
+    for (const hit of hits) {
+      entity = hit.getEntity?.()
+      if (entity) break
+    }
+    return entity
+  }
+
+  getEntityAtPointer() {
+    const hits = this.world.stage.raycastPointer(this.control.pointer.position)
     let entity
     for (const hit of hits) {
       entity = hit.getEntity?.()
