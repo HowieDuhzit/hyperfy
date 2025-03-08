@@ -926,7 +926,7 @@ export class PlayerLocal extends Entity {
   push(force) {
     force = v1.fromArray(force)
     // squash vertical to emulate what our huge horizontal drag coefficient does
-    force.y *= 0.1
+    // force.y *= 0.1
     // add to any existing push
     if (this.pushForce) {
       this.pushForce.add(force)
