@@ -535,6 +535,7 @@ export class PlayerLocal extends Entity {
           // if we're pushing up, act like a jump so we don't stick to the ground
           if (this.pushForce.y) {
             this.jumped = true
+            // ensure other stuff is reset
             this.jumping = false
             this.falling = false
             this.airJumped = false

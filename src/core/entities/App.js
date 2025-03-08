@@ -237,7 +237,11 @@ export class App extends Entity {
     }
     if (data.hasOwnProperty('position')) {
       this.data.position = data.position
-      this.networkPos.pushArray(data.position)
+      if (this.data.mover) {
+        this.networkPos.pushArray(data.position)
+      } else {
+        rebuild = true
+      }
     }
     if (data.hasOwnProperty('quaternion')) {
       this.data.quaternion = data.quaternion
