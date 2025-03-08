@@ -377,7 +377,7 @@ export class UI extends Node {
       }
       // Check children from front to back
       for (let i = node.children.length - 1; i >= 0; i--) {
-        const childHit = findHitNode(node.children[i], left, top)
+        const childHit = findHitNode(node.children[i], offsetX, offsetY)
         if (childHit) return childHit
       }
       return node

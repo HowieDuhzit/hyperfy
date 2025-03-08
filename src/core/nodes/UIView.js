@@ -283,7 +283,7 @@ export class UIView extends Node {
     if (!isNumber(value)) {
       throw new Error(`[uiview] padding not a number`)
     }
-    if (this._padding === value) rturn
+    if (this._padding === value) return
     this._padding = value
     this.yogaNode?.setPadding(Yoga.EDGE_ALL, this._padding * this.ui._res)
     this.ui?.redraw()
