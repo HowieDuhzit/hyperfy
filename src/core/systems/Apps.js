@@ -1,4 +1,4 @@
-import { isArray, isEqual, isFunction, merge } from 'lodash-es'
+import { isArray, isEqual, isFunction, isNumber } from 'lodash-es'
 import { System } from './System'
 import { getRef } from '../nodes/Node'
 import { Layers } from '../extras/Layers'
