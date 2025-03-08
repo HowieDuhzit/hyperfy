@@ -574,9 +574,14 @@ function ActionIcon({ icon: Icon }) {
 
 function Reticle({ world }) {
   const [visible, setVisible] = useState(world.controls.pointer.locked)
+  const [buildMode, setBuildMode] = useState(world.builder.enabled)
   useEffect(() => {
     world.on('pointer-lock', setVisible)
-    return () => world.off('pointer-lock', setVisible)
+    world.on('build-mode', setBuildMode)
+    return () => {
+      world.off('pointer-lock', setVisible)
+      world.off('build-mode', setBuildMode)
+    }
   }, [])
   if (!visible) return null
   return (
@@ -589,13 +594,11 @@ function Reticle({ world }) {
         align-items: center;
         justify-content: center;
         .reticle-item {
-          width: 10px;
-          height: 10px;
-          border-radius: 5px;
-          /* border: 1.5px solid rgba(255, 255, 255, 0.8); */
-          border: 1.5px solid white;
-          /* box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1); */
-          mix-blend-mode: difference;
+          width: 20px;
+          height: 20px;
+          border-radius: 10px;
+          border: 2px solid ${buildMode ? '#ff4d4d' : 'white'};
+          mix-blend-mode: ${buildMode ? 'normal' : 'difference'};
         }
       `}
     >
