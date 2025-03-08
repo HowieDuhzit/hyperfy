@@ -1,12 +1,13 @@
+import moment from 'moment'
 import { isArray, isEqual, isFunction, isNumber } from 'lodash-es'
+import * as THREE from '../extras/three'
+
 import { System } from './System'
 import { getRef } from '../nodes/Node'
 import { Layers } from '../extras/Layers'
-import moment from 'moment'
 import { ControlPriorities } from '../extras/ControlPriorities'
 import { warn } from '../extras/warn'
 
-const hotEventNames = ['fixedUpdate', 'update', 'lateUpdate']
 const internalEvents = ['fixedUpdate', 'updated', 'lateUpdate', 'enter', 'leave', 'chat', 'health']
 
 /**
@@ -24,6 +25,7 @@ export class Apps extends System {
   }
 
   initWorldApi() {
+    const self = this
     const world = this.world
     this.worldApi = {
       getNetworkId(entity) {
@@ -120,8 +122,8 @@ export class Apps extends System {
           throw new Error('[raycast] layerMask must be number')
         const hit = world.physics.raycast(origin, direction, maxDistance, layerMask)
         if (!hit) return null
-        if (!this.raycastHit) {
-          this.raycastHit = {
+        if (!self.raycastHit) {
+          self.raycastHit = {
             point: new THREE.Vector3(),
             normal: new THREE.Vector3(),
             distance: 0,
@@ -129,12 +131,12 @@ export class Apps extends System {
             playerId: null,
           }
         }
-        this.raycastHit.point.copy(hit.point)
-        this.raycastHit.normal.copy(hit.normal)
-        this.raycastHit.distance = hit.distance
-        this.raycastHit.tag = hit.handle?.tag
-        this.raycastHit.playerId = hit.handle?.playerId
-        return this.raycastHit
+        self.raycastHit.point.copy(hit.point)
+        self.raycastHit.normal.copy(hit.normal)
+        self.raycastHit.distance = hit.distance
+        self.raycastHit.tag = hit.handle?.tag
+        self.raycastHit.playerId = hit.handle?.playerId
+        return self.raycastHit
       },
       overlapSphere(entity, radius, origin, layerMask) {
         const hits = world.physics.overlapSphere(radius, origin, layerMask)
