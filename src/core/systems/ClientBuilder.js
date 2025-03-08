@@ -599,6 +599,10 @@ export class ClientBuilder extends System {
         }
         const dup = this.world.entities.add(data, true)
         this.select(dup)
+        this.addUndo({
+          name: 'remove-entity',
+          entityId: data.id,
+        })
       }
     }
     
@@ -706,6 +710,12 @@ export class ClientBuilder extends System {
         position: entity.data.position,
       })
       entity.build()
+      return
+    }
+    if (undo.name === 'remove-entity') {
+      const entity = this.world.entities.get(undo.entityId)
+      if (!entity) return
+      entity.destroy(true)
       return
     }
   }
