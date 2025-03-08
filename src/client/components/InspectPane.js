@@ -47,6 +47,7 @@ import {
   InputText,
   InputTextarea,
 } from './Inputs'
+import { isArray } from 'lodash-es'
 
 // Add this custom scrollbar styling after the imports
 const customScrollbarStyle = `
@@ -1844,7 +1845,7 @@ function Field({ world, props, field, value, modify }) {
   if (field.hidden) {
     return null
   }
-  if (field.when) {
+  if (field.when && isArray(field.when)) {
     for (const rule of field.when) {
       if (rule.op === 'eq' && props[rule.key] !== rule.value) {
         return null
