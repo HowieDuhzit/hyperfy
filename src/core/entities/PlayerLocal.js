@@ -64,6 +64,9 @@ export class PlayerLocal extends Entity {
     this.groundSweepRadius = this.capsuleRadius - 0.01 // slighty smaller than player
     this.groundSweepGeometry = new PHYSX.PxSphereGeometry(this.groundSweepRadius)
 
+    this.pushForce = null
+    this.pushForceInit = false
+
     this.slipping = false
 
     this.jumped = false
@@ -464,6 +467,8 @@ export class PlayerLocal extends Entity {
       if (this.jumping && this.grounded) {
         this.jumping = false
       }
+
+      // if airJumping and we're now on the ground, clear it
       if (this.airJumped && this.grounded) {
         this.airJumped = false
         this.airJumping = false
@@ -522,6 +527,34 @@ export class PlayerLocal extends Entity {
         // increase downward velocity to prevent sliding upward when walking at a slope
         velocity.y -= 0.5
       }
+
+      // apply additional push force
+      if (this.pushForce) {
+        if (!this.pushForceInit) {
+          this.pushForceInit = true
+          // if we're pushing up, act like a jump so we don't stick to the ground
+          if (this.pushForce.y) {
+            this.jumped = true
+            this.jumping = false
+            this.falling = false
+            this.airJumped = false
+            this.airJumping = false
+          }
+        }
+        velocity.add(this.pushForce)
+        const drag = 20
+        const decayFactor = 1 - drag * delta
+        if (decayFactor < 0) {
+          // if drag * delta > 1, just set to zero
+          this.pushForce.set(0, 0, 0)
+        } else {
+          this.pushForce.multiplyScalar(Math.max(decayFactor, 0))
+        }
+        if (this.pushForce.length() < 0.01) {
+          this.pushForce = null
+        }
+      }
+
       this.capsule.setLinearVelocity(velocity.toPxVec3())
 
       // apply move force, projected onto ground normal
@@ -888,6 +921,21 @@ export class PlayerLocal extends Entity {
       id: this.data.id,
       ef: effect,
     })
+  }
+
+  push(force) {
+    force = v1.fromArray(force)
+    // squash vertical to emulate what our huge horizontal drag coefficient does
+    force.y *= 0.1
+    // add to any existing push
+    if (this.pushForce) {
+      this.pushForce.add(force)
+    }
+    // otherwise start push
+    else {
+      this.pushForce = force.clone()
+      this.pushForceInit = false
+    }
   }
 
   setSessionAvatar(avatar) {

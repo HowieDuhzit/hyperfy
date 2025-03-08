@@ -125,5 +125,19 @@ export function createPlayerProxy(player) {
     cancelEffect() {
       activeEffectConfig?.onEnd()
     },
+    push(force) {
+      force = force.toArray()
+      // player.applyForce(force)
+      if (player.data.owner === world.network.id) {
+        // if player is local we can set directly
+        player.push(force)
+      } else if (world.network.isClient) {
+        // if we're a client we need to notify server
+        world.network.send('playerPush', { networkId: player.data.owner, force })
+      } else {
+        // if we're the server we need to notify the player
+        world.network.sendTo(player.data.owner, 'playerPush', { force })
+      }
+    },
   }
 }
