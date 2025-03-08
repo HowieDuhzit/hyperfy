@@ -226,7 +226,7 @@ export class Mesh extends Node {
   }
 
   get material() {
-    return self.handle?.material
+    return this.handle?.material
   }
 
   set material(value = defaults.material) {
