@@ -1,4 +1,4 @@
-import { fillRoundRect } from '../extras/fillRoundRect'
+import { fillRoundRect } from '../extras/roundRect'
 import * as THREE from '../extras/three'
 import CustomShaderMaterial from '../libs/three-custom-shader-material'
 import { uuid } from '../utils'
@@ -227,17 +227,17 @@ export class Nametags extends System {
     if (nametag.health < HEALTH_MAX) {
       // bar
       {
-        this.ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'
+        const fillStyle = 'rgba(0, 0, 0, 0.6)'
         const width = HEALTH_WIDTH
         const height = HEALTH_HEIGHT
         const left = x + (NAMETAG_WIDTH - HEALTH_WIDTH) / 2
         const top = y + NAME_FONT_SIZE + 5
         const borderRadius = HEALTH_BORDER_RADIUS
-        fillRoundRect(this.ctx, left, top, width, height, borderRadius)
+        fillRoundRect(this.ctx, left, top, width, height, borderRadius, fillStyle)
       }
       // health
       {
-        this.ctx.fillStyle = '#229710'
+        const fillStyle = '#229710'
         const maxWidth = HEALTH_WIDTH - HEALTH_BORDER * 2
         const perc = nametag.health / HEALTH_MAX
         const width = maxWidth * perc
@@ -245,7 +245,7 @@ export class Nametags extends System {
         const left = x + (NAMETAG_WIDTH - HEALTH_WIDTH) / 2 + HEALTH_BORDER
         const top = y + NAME_FONT_SIZE + 5 + HEALTH_BORDER
         const borderRadius = HEALTH_BORDER_RADIUS
-        fillRoundRect(this.ctx, left, top, width, height, borderRadius)
+        fillRoundRect(this.ctx, left, top, width, height, borderRadius, fillStyle)
       }
     }
     // update texture

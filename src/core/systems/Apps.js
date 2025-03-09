@@ -136,9 +136,6 @@ export class Apps extends System {
         self.raycastHit.distance = hit.distance
         self.raycastHit.tag = hit.handle?.tag
         self.raycastHit.playerId = hit.handle?.playerId
-        if (!hit.handle?.player) {
-          this.raycastHit.app = hit.handle?.node.ctx.entity
-        }
         return self.raycastHit
       },
       overlapSphere(entity, radius, origin, layerMask) {

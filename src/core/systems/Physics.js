@@ -374,7 +374,7 @@ export class Physics extends System {
     this.ignoreSetGlobalPose = false
   }
 
-  raycast(origin, direction, maxDistance, layerMask) {
+  raycast(origin, direction, maxDistance = Infinity, layerMask) {
     origin = origin.toPxVec3(this._pv1)
     direction = direction.toPxVec3(this._pv2)
     // this.queryFilterData.flags |= PHYSX.PxQueryFlagEnum.ePREFILTER | PHYSX.PxQueryFlagEnum.ePOSTFILTER // prettier-ignore
