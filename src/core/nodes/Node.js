@@ -385,6 +385,11 @@ export class Node {
         get matrixWorld() {
           return self.matrixWorld
         },
+        get children() {
+          return self.children.map(child => {
+            return child.getProxy()
+          })
+        },
         get active() {
           return self.active
         },
