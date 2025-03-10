@@ -450,7 +450,7 @@ export class ClientBuilder extends System {
       this.toggle()
     }
     // deselect if dead
-    if (this.selected?.dead) {
+    if (this.selected?.destroyed) {
       this.select(null)
     }
     // deselect if stolen

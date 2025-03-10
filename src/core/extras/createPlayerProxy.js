@@ -38,6 +38,9 @@ export function createPlayerProxy(player) {
     get height() {
       return player.avatar?.getHeight()
     },
+    get destroyed() {
+      return !!player.destroyed
+    },
     teleport(position, rotationY) {
       if (player.data.owner === world.network.id) {
         // if player is local we can set directly

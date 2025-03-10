@@ -209,8 +209,8 @@ export class PlayerRemote extends Entity {
   }
 
   destroy(local) {
-    if (this.dead) return
-    this.dead = true
+    if (this.destroyed) return
+    this.destroyed = true
 
     clearTimeout(this.chatTimer)
     this.base.deactivate()

@@ -263,8 +263,8 @@ export class App extends Entity {
   }
 
   destroy(local) {
-    if (this.dead) return
-    this.dead = true
+    if (this.destroyed) return
+    this.destroyed = true
 
     this.unbuild()
 
@@ -395,7 +395,7 @@ export class App extends Entity {
   getPlayerProxy(playerId) {
     if (playerId === undefined) playerId = this.world.entities.player?.data.id
     let proxy = this.playerProxies.get(playerId)
-    if (!proxy) {
+    if (!proxy || proxy.destroyed) {
       const player = this.world.entities.getPlayer(playerId)
       if (!player) return null
       proxy = createPlayerProxy(player)
