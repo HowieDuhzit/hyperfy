@@ -171,15 +171,17 @@ A simple section header to help group fields together
 }
 ```
 
-### Button
+### Buttons
 
-A button that when pressed can execute something in the running instance of the app.
+Displays one or more buttons that when clicked, execute something in the running app.
 
 ```jsx
 {
-  type: 'button',
+  type: 'buttons',
   key: String,           // a unique `key` for this button
   label: String,         // the label for the button
-  onClick: Function,     // the function that is called when the button is pressed.
+  buttons: [
+    ...{ label: String, onClick: Function },
+  ]
 }
 ```
