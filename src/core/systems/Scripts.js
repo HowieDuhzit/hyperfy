@@ -42,7 +42,7 @@ export class Scripts extends System {
       Vector3: THREE.Vector3,
       Euler: THREE.Euler,
       Matrix4: THREE.Matrix4,
-      THREE: THREE,
+      THREE,
       LerpVector3,
       LerpQuaternion,
       GameWorld: world,
