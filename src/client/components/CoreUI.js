@@ -55,12 +55,14 @@ function Content({ world, width, height }) {
   const [disconnected, setDisconnected] = useState(false)
   const [settings, setSettings] = useState(false)
   const [apps, setApps] = useState(false)
+  const [kicked, setKicked] = useState(null)
   useEffect(() => {
     world.on('ready', setReady)
     world.on('player', setPlayer)
     world.on('inspect', setInspect)
     world.on('code', setCode)
     world.on('avatar', setAvatar)
+    world.on('kick', setKicked)
     world.on('disconnect', setDisconnected)
     return () => {
       world.off('ready', setReady)
@@ -68,6 +70,7 @@ function Content({ world, width, height }) {
       world.off('inspect', setInspect)
       world.off('code', setCode)
       world.off('avatar', setAvatar)
+      world.off('kick', setKicked)
       world.off('disconnect', setDisconnected)
     }
   }, [])
@@ -108,6 +111,7 @@ function Content({ world, width, height }) {
       {settings && <SettingsPane world={world} player={player} close={() => setSettings(false)} />}
       {apps && <AppsPane world={world} close={() => setApps(false)} />}
       {!ready && <LoadingOverlay />}
+      {kicked && <KickedOverlay code={kicked} />}
     </div>
   )
 }
@@ -472,6 +476,39 @@ function LoadingOverlay() {
       `}
     >
       <LoaderIcon size={30} />
+    </div>
+  )
+}
+
+const kickMessages = {
+  duplicate_user: 'Player already active on another device or window.',
+  unknown: 'You were kicked.',
+}
+function KickedOverlay({ code }) {
+  return (
+    <div
+      css={css`
+        position: absolute;
+        inset: 0;
+        background: black;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        pointer-events: auto;
+        @keyframes spin {
+          from {
+            transform: rotate(0deg);
+          }
+          to {
+            transform: rotate(360deg);
+          }
+        }
+        svg {
+          animation: spin 1s linear infinite;
+        }
+      `}
+    >
+      <div>{kickMessages[code] || kickMessages.unknown}</div>
     </div>
   )
 }

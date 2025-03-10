@@ -175,6 +175,10 @@ export class ClientNetwork extends System {
     this.world.entities.player?.setSessionAvatar(data.avatar)
   }
 
+  onKick = code => {
+    this.world.emit('kick', code)
+  }
+
   onClose = code => {
     this.world.emit('disconnect', code || true)
     console.log('disconnect', code)

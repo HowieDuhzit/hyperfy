@@ -205,6 +205,14 @@ export class ServerNetwork extends System {
       }
       user.roles = user.roles.split(',')
 
+      // disconnect if user already in this world
+      if (this.sockets.has(user.id)) {
+        const packet = writePacket('kick', 'duplicate_user')
+        ws.send(packet)
+        ws.disconnect()
+        return
+      }
+
       // if there is no admin code, everyone is a temporary admin (eg for local dev)
       // all roles prefixed with `~` are temporary and not persisted to db
       if (!process.env.ADMIN_CODE) {
@@ -212,17 +220,17 @@ export class ServerNetwork extends System {
       }
 
       // create socket
-      const socket = new Socket({ ws, network: this })
+      const socket = new Socket({ id: user.id, ws, network: this })
 
       // spawn player
       socket.player = this.world.entities.add(
         {
-          id: uuid(),
+          id: user.id,
           type: 'player',
           position: this.spawn.position.slice(),
           quaternion: this.spawn.quaternion.slice(),
-          owner: socket.id,
-          userId: user.id,
+          owner: socket.id, // deprecated, same as userId
+          userId: user.id, // deprecated, same as userId
           name: user.name,
           health: HEALTH_MAX,
           avatar: user.avatar,
