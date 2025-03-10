@@ -159,7 +159,7 @@ export class UIImage extends Node {
         console.error('uiimage: failed to load:', error)
         reject(error)
       }
-      img.src = src
+      img.src = this.ctx?.world.resolveURL(src)
     })
   }
 
