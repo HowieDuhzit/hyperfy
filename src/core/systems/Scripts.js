@@ -1,6 +1,7 @@
 import { System } from './System'
 
 import * as THREE from '../extras/three'
+import {Water} from "three/addons/objects/Water.js"
 import { DEG2RAD, RAD2DEG } from '../extras/general'
 import { clamp, num, uuid } from '../utils'
 import { LerpVector3 } from '../extras/LerpVector3'
@@ -43,6 +44,7 @@ export class Scripts extends System {
       Euler: THREE.Euler,
       Matrix4: THREE.Matrix4,
       THREE,
+      Water,
       LerpVector3,
       LerpQuaternion,
       GameWorld: world,
