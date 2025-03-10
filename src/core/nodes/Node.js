@@ -385,11 +385,6 @@ export class Node {
         get matrixWorld() {
           return self.matrixWorld
         },
-        get children() {
-          return self.children.map(child => {
-            return child.getProxy()
-          })
-        },
         get active() {
           return self.active
         },
@@ -401,6 +396,11 @@ export class Node {
         },
         set parent(value) {
           throw new Error('Cannot set parent directly')
+        },
+        get children() {
+          return self.children.map(child => {
+            return child.getProxy()
+          })
         },
         add(pNode) {
           const node = getRef(pNode)
