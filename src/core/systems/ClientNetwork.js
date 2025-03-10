@@ -40,6 +40,11 @@ export class ClientNetwork extends System {
     this.ws.send(packet)
   }
 
+  sendTo(playerId, name, data) {
+    const packet = writePacket('sendTo', { playerId, name, data })
+    this.ws.send(packet)
+  }
+
   async upload(file) {
     {
       // first check if we even need to upload it

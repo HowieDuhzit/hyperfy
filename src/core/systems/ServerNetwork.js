@@ -429,6 +429,10 @@ export class ServerNetwork extends System {
     this.sendTo(data.networkId, 'playerSessionAvatar', data.avatar)
   }
 
+  onSendTo = (socket, data) => {
+    this.sendTo(data.playerId, data.name, data.data)
+  }
+
   onDisconnect = (socket, code) => {
     socket.player.destroy(true)
     this.sockets.delete(socket.id)
