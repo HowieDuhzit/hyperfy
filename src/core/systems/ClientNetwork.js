@@ -155,6 +155,7 @@ export class ClientNetwork extends System {
 
   onEntityModified = data => {
     const entity = this.world.entities.get(data.id)
+    if (!entity) return console.error('onEntityModified: no entity found', data)
     entity.modify(data)
   }
 
