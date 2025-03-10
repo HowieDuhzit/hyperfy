@@ -1839,6 +1839,7 @@ const fieldTypes = {
   switch: FieldSwitch,
   dropdown: FieldDropdown,
   range: FieldRange,
+  button: FieldButton,
 }
 
 function Field({ world, props, field, value, modify }) {
@@ -1968,6 +1969,32 @@ function FieldDropdown({ world, field, value, modify }) {
   return (
     <FieldWithLabel label={field.label}>
       <InputDropdown options={field.options} value={value} onChange={value => modify(field.key, value)} />
+    </FieldWithLabel>
+  )
+}
+
+function FieldButton({ world, field, value, modify }) {
+  return (
+    <FieldWithLabel label={''}>
+      <div
+        css={css`
+          background: #252630;
+          border-radius: 10px;
+          height: 34px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 14px;
+          font-weight: 500;
+          &:hover {
+            cursor: pointer;
+            background: #30323e;
+          }
+        `}
+        onClick={field.onClick}
+      >
+        <span>{field.label}</span>
+      </div>
     </FieldWithLabel>
   )
 }
