@@ -253,6 +253,10 @@ export class ServerNetwork extends System {
       })
 
       this.sockets.set(socket.id, socket)
+
+      // enter events on the server are sent after the snapshot.
+      // on the client these are sent during PlayerRemote.js entity instantiation!
+      this.world.events.emit('enter', { playerId: socket.player.data.id })
     } catch (err) {
       console.error(err)
     }
