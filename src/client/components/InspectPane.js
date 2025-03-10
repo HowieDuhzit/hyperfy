@@ -27,6 +27,7 @@ import {
   SparkleIcon,
   ZapIcon,
   Trash2Icon,
+  ClipboardCopy,
 } from 'lucide-react'
 
 import { hashFile } from '../../core/utils-client'
@@ -46,6 +47,7 @@ import {
   InputText,
   InputTextarea,
 } from './Inputs'
+import { isArray } from 'lodash-es'
 
 export function InspectPane({ world, entity }) {
   if (entity.isApp) {
@@ -273,6 +275,14 @@ function AppPaneMain({ world, app, blueprint, canEdit }) {
   const editCode = () => {
     world.emit('code', true)
   }
+  const copyAppId = async() => {
+    if (!navigator) {
+      world.emit('toast', 'Cannot copy to clipboard "navigator" is undefined')
+      return;
+    }
+    navigator.clipboard.writeText(app.data.id)
+    world.emit('toast', 'Coppied App Id to clipboard')
+  }
   const toggle = async key => {
     const value = !blueprint[key]
     const version = blueprint.version + 1
@@ -401,7 +411,7 @@ function AppPaneMain({ world, app, blueprint, canEdit }) {
         <div
           className='amain-image'
           css={css`
-            background-image: ${blueprint.image ? `url(${resolveURL(blueprint.image.url)})` : 'none'};
+            background-image: ${blueprint.image ? `url(${world.resolveURL(blueprint.image.url)})` : 'none'};
           `}
         />
       )}
@@ -410,7 +420,7 @@ function AppPaneMain({ world, app, blueprint, canEdit }) {
         <div className='amain-author'>
           <span>by </span>
           {blueprint.url && (
-            <a href={resolveURL(blueprint.url)} target='_blank'>
+            <a href={world.resolveURL(blueprint.url)} target='_blank'>
               {blueprint.author || 'Unknown'}
             </a>
           )}
@@ -430,6 +440,13 @@ function AppPaneMain({ world, app, blueprint, canEdit }) {
             <div className='amain-btns-btn' onClick={editCode}>
               <FileCode2Icon size={16} />
               <span>Code</span>
+            </div>
+            <div
+              className='amain-btns-btn'
+              onClick={() => copyAppId() }
+            >
+              <ClipboardCopy size={12} />
+              <span>Copy Id</span>
             </div>
           </div>
           <div className='amain-btns2'>
@@ -788,7 +805,10 @@ const fieldTypes = {
 }
 
 function Field({ world, props, field, value, modify }) {
-  if (field.when) {
+  if (field.hidden) {
+    return null
+  }
+  if (field.when && isArray(field.when)) {
     for (const rule of field.when) {
       if (rule.op === 'eq' && props[rule.key] !== rule.value) {
         return null
@@ -913,18 +933,4 @@ function FieldDropdown({ world, field, value, modify }) {
       <InputDropdown options={field.options} value={value} onChange={value => modify(field.key, value)} />
     </FieldWithLabel>
   )
-}
-
-function resolveURL(url) {
-  url = url.trim()
-  if (url.startsWith('asset://')) {
-    return url.replace('asset:/', process.env.PUBLIC_ASSETS_URL)
-  }
-  if (url.match(/^https?:\/\//i)) {
-    return url
-  }
-  if (url.startsWith('//')) {
-    return `https:${url}`
-  }
-  return `https://${url}`
 }
