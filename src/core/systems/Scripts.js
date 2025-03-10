@@ -46,6 +46,7 @@ export class Scripts extends System {
       THREE,
       Water,
       LerpVector3,
+      window: typeof window !== 'undefined' ? window : globalThis,
       LerpQuaternion,
       GameWorld: world,
       // Material: Material,
