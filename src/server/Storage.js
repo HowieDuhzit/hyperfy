@@ -1,5 +1,5 @@
 import fs from 'fs-extra'
-import { throttle } from 'lodash-es'
+import { cloneDeep, throttle } from 'lodash-es'
 
 export class Storage {
   constructor(file) {
@@ -17,8 +17,7 @@ export class Storage {
   }
 
   set(key, value) {
-    if (this.data[key] === value) return
-    this.data[key] = value
+    this.data[key] = cloneDeep(value)
     this.save()
   }
 
