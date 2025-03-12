@@ -10,7 +10,7 @@ import { CoreUI } from './components/CoreUI'
 
 export { System } from '../core/systems/System'
 
-export function Client({ wsUrl, systems = {} }) {
+export function Client({ wsUrl, onSetup }) {
   const viewportRef = useRef()
   const uiRef = useRef()
   const world = useMemo(() => createClientWorld(), [])
@@ -28,10 +28,9 @@ export function Client({ wsUrl, systems = {} }) {
       fogFar: null,
       fogColor: null,
     }
-    for (const [key, System] of Object.entries(systems)) {
-      world.register(key, System)
-    }
-    world.init({ viewport, ui, wsUrl, loadPhysX, baseEnvironment })
+    const config = { viewport, ui, wsUrl, loadPhysX, baseEnvironment }
+    onSetup?.(world, config)
+    world.init(config)
   }, [])
   return (
     <div
