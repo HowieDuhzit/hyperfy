@@ -1,7 +1,7 @@
 import * as THREE from '../extras/three'
 import { isBoolean, isNumber } from 'lodash-es'
 
-import { Node } from './Node'
+import { Node, secureRef } from './Node'
 import { getTrianglesFromGeometry } from '../extras/getTrianglesFromGeometry'
 import { getTextureBytesFromMaterial } from '../extras/getTextureBytesFromMaterial'
 
@@ -212,7 +212,7 @@ export class Mesh extends Node {
   }
 
   get geometry() {
-    return self._geometry
+    return secureRef({}, () => this._geometry)
   }
 
   set geometry(value = defaults.geometry) {
@@ -226,7 +226,7 @@ export class Mesh extends Node {
   }
 
   get material() {
-    return self.handle.material
+    return this.handle?.material
   }
 
   set material(value = defaults.material) {
@@ -339,13 +339,13 @@ export class Mesh extends Node {
           self.radius = value
         },
         get geometry() {
-          return null // TODO: handle?
+          return self.geometry
         },
         set geometry(value) {
-          throw new Error('[mesh] set geometry not supported')
+          self.geometry = value
         },
         get material() {
-          return self.handle.material
+          return self.material
         },
         set material(value) {
           throw new Error('[mesh] set material not supported')

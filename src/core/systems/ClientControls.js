@@ -242,7 +242,7 @@ export class ClientControls extends System {
     // - 0 is lowest priority generally for player controls
     // - apps use higher priority
     // - global systems use highest priority over everything
-    const idx = this.controls.findIndex(c => c.options.priority < options.priority)
+    const idx = this.controls.findIndex(c => c.options.priority <= options.priority)
     if (idx === -1) {
       this.controls.push(control)
     } else {
@@ -322,8 +322,8 @@ export class ClientControls extends System {
       if (button?.$button) {
         button.pressed = true
         button.down = true
-        button.onPress?.()
-        if (button.capture) break
+        const capture = button.onPress?.()
+        if (capture || button.capture) break
       }
       const capture = control.onButtonPress?.(prop, text)
       if (capture) break
@@ -386,8 +386,8 @@ export class ClientControls extends System {
         if (button) {
           button.down = true
           button.pressed = true
-          button.onPress?.()
-          if (button.capture) break
+          const capture = button.onPress?.()
+          if (capture || button.capture) break
         }
       }
     }
@@ -414,8 +414,8 @@ export class ClientControls extends System {
         if (button) {
           button.down = true
           button.pressed = true
-          button.onPress?.()
-          if (button.capture) break
+          const capture = button.onPress?.()
+          if (capture || button.capture) break
         }
       }
     }
@@ -488,6 +488,7 @@ export class ClientControls extends System {
   }
 
   onTouchStart = e => {
+    if (e.isCoreUI) return
     e.preventDefault()
     for (let i = 0; i < e.changedTouches.length; i++) {
       const touch = e.changedTouches[i]
@@ -506,6 +507,7 @@ export class ClientControls extends System {
   }
 
   onTouchMove = e => {
+    if (e.isCoreUI) return
     for (let i = 0; i < e.changedTouches.length; i++) {
       const touch = e.changedTouches[i]
       const info = this.touches.get(touch.identifier)
@@ -521,6 +523,7 @@ export class ClientControls extends System {
   }
 
   onTouchEnd = e => {
+    if (e.isCoreUI) return
     for (let i = 0; i < e.changedTouches.length; i++) {
       const touch = e.changedTouches[i]
       const info = this.touches.get(touch.identifier)

@@ -1,6 +1,6 @@
 {
   "name": "hyperfy",
-  "version": "0.8.1",
+  "version": "0.9.0",
   "type": "module",
   "main": "index.js",
   "homepage": "https://github.com/hyperfy-xyz/hyperfy#readme",
@@ -24,6 +24,8 @@
     "world:clean": "node scripts/clean-world.mjs",
     "viewer:dev": "node scripts/build-viewer.mjs --dev",
     "viewer:build": "node scripts/build-viewer.mjs",
+    "client:dev": "node scripts/build-client.mjs --dev",
+    "client:build": "node scripts/build-client.mjs",
     "lint": "eslint . --ext .js,.jsx",
     "lint:fix": "eslint . --ext .js,.jsx --fix",
     "format": "prettier --write .",

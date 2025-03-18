@@ -64,6 +64,9 @@ export class PlayerLocal extends Entity {
     this.groundSweepRadius = this.capsuleRadius - 0.01 // slighty smaller than player
     this.groundSweepGeometry = new PHYSX.PxSphereGeometry(this.groundSweepRadius)
 
+    this.pushForce = null
+    this.pushForceInit = false
+
     this.slipping = false
 
     this.jumped = false
@@ -93,10 +96,10 @@ export class PlayerLocal extends Entity {
     this.base.position.fromArray(this.data.position)
     this.base.quaternion.fromArray(this.data.quaternion)
 
-    // this.nametag = createNode({ name: 'nametag', label: this.data.name, health: this.data.health, active: false })
-    // this.base.add(this.nametag)
-
     this.aura = createNode('group')
+
+    this.nametag = createNode('nametag', { label: '', health: this.data.health, active: false })
+    this.aura.add(this.nametag)
 
     this.bubble = createNode('ui', {
       width: 300,
@@ -159,11 +162,11 @@ export class PlayerLocal extends Entity {
         if (this.avatar) this.avatar.deactivate()
         this.avatar = src.toNodes().get('avatar')
         this.base.add(this.avatar)
-        // this.nametag.position.y = this.avatar.height + 0.2
+        this.nametag.position.y = this.avatar.getHeadToHeight() + 0.2
         this.bubble.position.y = this.avatar.getHeadToHeight() + 0.2
-        // if (!this.bubble.active) {
-        //   this.nametag.active = true
-        // }
+        if (!this.bubble.active) {
+          this.nametag.active = true
+        }
         this.avatarUrl = avatarUrl
         this.camHeight = this.avatar.height * 0.95
       })
@@ -227,14 +230,14 @@ export class PlayerLocal extends Entity {
     // For now the best solution is to just add a sphere right in the center of our capsule to keep that problem at bay.
     let shape2
     {
-      const geometry = new PHYSX.PxSphereGeometry(radius)
-      shape2 = this.world.physics.physics.createShape(geometry, this.material, true, flags)
-      shape2.setQueryFilterData(filterData)
-      shape2.setSimulationFilterData(filterData)
-      const pose = new PHYSX.PxTransform(PHYSX.PxIDENTITYEnum.PxIdentity)
-      v1.set(0, halfHeight + radius, 0).toPxTransform(pose)
-      shape2.setLocalPose(pose)
-      this.capsule.attachShape(shape2)
+      // const geometry = new PHYSX.PxSphereGeometry(radius)
+      // shape2 = this.world.physics.physics.createShape(geometry, this.material, true, flags)
+      // shape2.setQueryFilterData(filterData)
+      // shape2.setSimulationFilterData(filterData)
+      // const pose = new PHYSX.PxTransform(PHYSX.PxIDENTITYEnum.PxIdentity)
+      // v1.set(0, halfHeight + radius, 0).toPxTransform(pose)
+      // shape2.setLocalPose(pose)
+      // this.capsule.attachShape(shape2)
     }
     this.capsuleHandle = this.world.physics.addActor(this.capsule, {
       tag: null,
@@ -319,7 +322,7 @@ export class PlayerLocal extends Entity {
         const pose = this.capsule.getGlobalPose()
         const origin = v1.copy(pose.p)
         origin.y += 0.2
-        const hitMask = Layers.environment.group | Layers.prop.group | Layers.tool.group
+        const hitMask = Layers.environment.group | Layers.prop.group
         const hit = this.world.physics.raycast(origin, DOWN, 2, hitMask)
         let actor = hit?.handle?.actor || null
         // if we found a new platform, set it up for tracking
@@ -384,7 +387,7 @@ export class PlayerLocal extends Entity {
         origin.y += this.groundSweepRadius + 0.12 // move up inside player + a bit
         const direction = DOWN
         const maxDistance = 0.12 + 0.1 // outside player + a bit more
-        const hitMask = Layers.environment.group | Layers.prop.group | Layers.tool.group
+        const hitMask = Layers.environment.group | Layers.prop.group
         sweepHit = this.world.physics.sweep(geometry, origin, direction, maxDistance, hitMask)
       }
 
@@ -464,6 +467,8 @@ export class PlayerLocal extends Entity {
       if (this.jumping && this.grounded) {
         this.jumping = false
       }
+
+      // if airJumping and we're now on the ground, clear it
       if (this.airJumped && this.grounded) {
         this.airJumped = false
         this.airJumping = false
@@ -522,6 +527,35 @@ export class PlayerLocal extends Entity {
         // increase downward velocity to prevent sliding upward when walking at a slope
         velocity.y -= 0.5
       }
+
+      // apply additional push force
+      if (this.pushForce) {
+        if (!this.pushForceInit) {
+          this.pushForceInit = true
+          // if we're pushing up, act like a jump so we don't stick to the ground
+          if (this.pushForce.y) {
+            this.jumped = true
+            // ensure other stuff is reset
+            this.jumping = false
+            this.falling = false
+            this.airJumped = false
+            this.airJumping = false
+          }
+        }
+        velocity.add(this.pushForce)
+        const drag = 20
+        const decayFactor = 1 - drag * delta
+        if (decayFactor < 0) {
+          // if drag * delta > 1, just set to zero
+          this.pushForce.set(0, 0, 0)
+        } else {
+          this.pushForce.multiplyScalar(Math.max(decayFactor, 0))
+        }
+        if (this.pushForce.length() < 0.01) {
+          this.pushForce = null
+        }
+      }
+
       this.capsule.setLinearVelocity(velocity.toPxVec3())
 
       // apply move force, projected onto ground normal
@@ -817,11 +851,6 @@ export class PlayerLocal extends Entity {
       this.lastSendAt = 0
     }
 
-    // left-click lock pointer
-    if (!this.control.pointer.locked && this.control.mouseLeft.pressed) {
-      this.control.pointer.lock()
-    }
-
     // effect duration
     if (this.data.effect?.duration) {
       this.data.effect.duration -= delta
@@ -895,6 +924,21 @@ export class PlayerLocal extends Entity {
     })
   }
 
+  push(force) {
+    force = v1.fromArray(force)
+    // squash vertical to emulate what our huge horizontal drag coefficient does
+    // force.y *= 0.1
+    // add to any existing push
+    if (this.pushForce) {
+      this.pushForce.add(force)
+    }
+    // otherwise start push
+    else {
+      this.pushForce = force.clone()
+      this.pushForceInit = false
+    }
+  }
+
   setSessionAvatar(avatar) {
     this.data.sessionAvatar = avatar
     this.applyAvatar()
@@ -905,13 +949,13 @@ export class PlayerLocal extends Entity {
   }
 
   chat(msg) {
-    // this.nametag.active = false
+    this.nametag.active = false
     this.bubbleText.value = msg
     this.bubble.active = true
     clearTimeout(this.chatTimer)
     this.chatTimer = setTimeout(() => {
       this.bubble.active = false
-      // this.nametag.active = true
+      this.nametag.active = true
     }, 5000)
   }
 
@@ -924,6 +968,9 @@ export class PlayerLocal extends Entity {
     }
     if (data.hasOwnProperty('health')) {
       this.data.health = data.health
+      this.nametag.health = data.health
+      this.world.events.emit('health', { playerId: this.data.id, health: data.health })
+      console.log('modify', data.health)
       // changed = true
     }
     if (data.hasOwnProperty('avatar')) {
