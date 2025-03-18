@@ -109,7 +109,7 @@ export class App extends Entity {
       this.abortController = new AbortController()
       this.script = script
       try {
-        this.script.exec(this.getWorldProxy(), this.getAppProxy(), this.fetch, blueprint.props)
+        this.script.exec(this.getWorldProxy(), this.getAppProxy(), this.fetch, blueprint.props, this.setTimeout)
       } catch (err) {
         console.error('script crashed')
         console.error(err)
@@ -164,6 +164,9 @@ export class App extends Entity {
     // abort fetch's etc
     this.abortController?.abort()
     this.abortController = null
+    // mark dead and re-create hook (timers, async etc)
+    this.deadHook.dead = true
+    this.deadHook = { dead: false }
     // clear fields
     this.onFields?.([])
   }
@@ -348,6 +351,19 @@ export class App extends Entity {
       console.error(err)
       // this.crash()
     }
+  }
+
+  setTimeout = (fn, ms) => {
+    const hook = this.getDeadHook()
+    const timerId = setTimeout(() => {
+      if (hook.dead) return
+      fn()
+    }, ms)
+    return timerId
+  }
+
+  getDeadHook = () => {
+    return this.deadHook
   }
 
   getNodes() {

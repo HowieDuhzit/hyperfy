@@ -36,22 +36,29 @@ export function Client({ wsUrl, onSetup }) {
   const world = useMemo(() => createClientWorld(), [])
   
   useEffect(() => {
-    const viewport = viewportRef.current
-    const ui = uiRef.current
-    const baseEnvironment = {
-      model: '/base-environment.glb',
-      bg: '/day2-2k.jpg',
-      hdr: '/day2.hdr',
-      sunDirection: new THREE.Vector3(-1, -2, -2).normalize(),
-      sunIntensity: 1,
-      sunColor: 0xffffff,
-      fogNear: null,
-      fogFar: null,
-      fogColor: null,
+    const init = async () => {
+      const viewport = viewportRef.current
+      const ui = uiRef.current
+      const baseEnvironment = {
+        model: '/base-environment.glb',
+        bg: '/day2-2k.jpg',
+        hdr: '/day2.hdr',
+        sunDirection: new THREE.Vector3(-1, -2, -2).normalize(),
+        sunIntensity: 1,
+        sunColor: 0xffffff,
+        fogNear: null,
+        fogFar: null,
+        fogColor: null,
+      }
+      if (typeof wsUrl === 'function') {
+        wsUrl = wsUrl()
+        if (wsUrl instanceof Promise) wsUrl = await wsUrl
+      }
+      const config = { viewport, ui, wsUrl, loadPhysX, baseEnvironment }
+      onSetup?.(world, config)
+      world.init(config)
     }
-    const config = { viewport, ui, wsUrl, loadPhysX, baseEnvironment }
-    onSetup?.(world, config)
-    world.init(config)
+    init()
   }, [])
 
   return (
