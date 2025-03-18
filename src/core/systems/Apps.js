@@ -267,7 +267,7 @@ export class Apps extends System {
         const isFunction = typeof value === 'function'
         if (isFunction) {
           this.worldMethods[key] = value
-          return
+          continue
         }
         if (value.get) {
           this.worldGetters[key] = value.get
@@ -283,7 +283,7 @@ export class Apps extends System {
         const isFunction = typeof value === 'function'
         if (isFunction) {
           this.appMethods[key] = value
-          return
+          continue
         }
         if (value.get) {
           this.appGetters[key] = value.get
