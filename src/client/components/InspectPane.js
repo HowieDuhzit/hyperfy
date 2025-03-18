@@ -47,7 +47,6 @@ import {
   InputText,
   InputTextarea,
 } from './Inputs'
-import { isArray } from 'lodash-es'
 
 // Add this custom scrollbar styling after the imports
 const customScrollbarStyle = `
@@ -562,7 +561,6 @@ function AppPaneNodes({ app }) {
   const isMountedRef = useRef(true); // Ref to track if component is mounted
   const appRef = useRef(app); // Ref to keep track of latest app reference
   const inputTimeoutRef = useRef(null); // Ref to track input timeout
-  const [precisionStep, setPrecisionStep] = useState(0.1); // Default step size for transform inputs
   
   // Update the app ref whenever app changes
   useEffect(() => {
@@ -1028,30 +1026,7 @@ function AppPaneNodes({ app }) {
     }, 50); // 50ms debounce delay
   };
   
-  // Add this utility function to increment/decrement values with precision
-  const adjustValue = useCallback((value, increment, step) => {
-    // Parse the value to ensure it's a number
-    const numValue = parseFloat(value);
-    if (isNaN(numValue)) return 0;
-    
-    // Calculate new value with the precision step
-    const newValue = increment ? numValue + step : numValue - step;
-    
-    // Return formatted to avoid floating point precision issues
-    const precision = Math.max(0, Math.ceil(Math.log10(1 / step)));
-    return parseFloat(newValue.toFixed(precision));
-  }, []);
-
-  // Create a function to cycle through precision steps
-  const cyclePrecision = useCallback(() => {
-    // Define available precision steps
-    const steps = [1, 0.1, 0.01, 0.001];
-    const currentIndex = steps.indexOf(precisionStep);
-    const nextIndex = (currentIndex + 1) % steps.length;
-    setPrecisionStep(steps[nextIndex]);
-  }, [precisionStep]);
-
-  // Update the formatVector function with the new controls
+  // Helper function to format vector values nicely
   const formatVector = (vec, onChangeVec, isChildNode = false) => {
     const components = extractVectorComponents(vec)
     if (!components) return 'None'
@@ -1067,28 +1042,14 @@ function AppPaneNodes({ app }) {
           <span style={{ width: '20px', display: 'inline-block' }}>X:</span>
           {showInputs ? (
             <div className="transform-input-wrapper">
-              <button 
-                className="transform-button minus"
-                onClick={() => safeChangeHandler('x', adjustValue(components.x, false, precisionStep), onChangeVec)}
-                disabled={disableInputs}
-              >
-                -
-              </button>
               <input 
                 type="number" 
                 value={typeof components.x === 'string' ? parseFloat(components.x) : components.x} 
                 onChange={(e) => safeChangeHandler('x', parseFloat(e.target.value), onChangeVec)}
                 disabled={disableInputs}
                 className={disableInputs ? "transform-input disabled" : "transform-input"}
-                step={precisionStep}
+                step="0.1"
               />
-              <button 
-                className="transform-button plus"
-                onClick={() => safeChangeHandler('x', adjustValue(components.x, true, precisionStep), onChangeVec)}
-                disabled={disableInputs}
-              >
-                +
-              </button>
             </div>
           ) : (
             <span style={{ marginLeft: '5px' }}>
@@ -1100,28 +1061,14 @@ function AppPaneNodes({ app }) {
           <span style={{ width: '20px', display: 'inline-block' }}>Y:</span>
           {showInputs ? (
             <div className="transform-input-wrapper">
-              <button 
-                className="transform-button minus"
-                onClick={() => safeChangeHandler('y', adjustValue(components.y, false, precisionStep), onChangeVec)}
-                disabled={disableInputs}
-              >
-                -
-              </button>
               <input 
                 type="number" 
                 value={typeof components.y === 'string' ? parseFloat(components.y) : components.y} 
                 onChange={(e) => safeChangeHandler('y', parseFloat(e.target.value), onChangeVec)}
                 disabled={disableInputs}
                 className={disableInputs ? "transform-input disabled" : "transform-input"}
-                step={precisionStep}
+                step="0.1"
               />
-              <button 
-                className="transform-button plus"
-                onClick={() => safeChangeHandler('y', adjustValue(components.y, true, precisionStep), onChangeVec)}
-                disabled={disableInputs}
-              >
-                +
-              </button>
             </div>
           ) : (
             <span style={{ marginLeft: '5px' }}>
@@ -1133,28 +1080,14 @@ function AppPaneNodes({ app }) {
           <span style={{ width: '20px', display: 'inline-block' }}>Z:</span>
           {showInputs ? (
             <div className="transform-input-wrapper">
-              <button 
-                className="transform-button minus"
-                onClick={() => safeChangeHandler('z', adjustValue(components.z, false, precisionStep), onChangeVec)}
-                disabled={disableInputs}
-              >
-                -
-              </button>
               <input 
                 type="number" 
                 value={typeof components.z === 'string' ? parseFloat(components.z) : components.z} 
                 onChange={(e) => safeChangeHandler('z', parseFloat(e.target.value), onChangeVec)}
                 disabled={disableInputs}
                 className={disableInputs ? "transform-input disabled" : "transform-input"}
-                step={precisionStep}
+                step="0.1"
               />
-              <button 
-                className="transform-button plus"
-                onClick={() => safeChangeHandler('z', adjustValue(components.z, true, precisionStep), onChangeVec)}
-                disabled={disableInputs}
-              >
-                +
-              </button>
             </div>
           ) : (
             <span style={{ marginLeft: '5px' }}>
@@ -1162,19 +1095,6 @@ function AppPaneNodes({ app }) {
             </span>
           )}
         </span>
-        
-        {/* Add precision step control */}
-        {showInputs && !disableInputs && (
-          <div className="precision-control">
-            <button 
-              className="precision-button" 
-              onClick={cyclePrecision} 
-              title="Change precision"
-            >
-              Step: {precisionStep}
-            </button>
-          </div>
-        )}
       </div>
     )
   }
@@ -1389,11 +1309,9 @@ function AppPaneNodes({ app }) {
           position: relative;
           flex: 1;
           margin-left: 5px;
-          display: flex;
-          align-items: center;
         }
         .transform-input {
-          flex: 1;
+          width: 100%;
           background: rgba(40, 40, 50, 0.8);
           color: white;
           border: 1px solid rgba(255, 255, 255, 0.2);
@@ -1401,7 +1319,6 @@ function AppPaneNodes({ app }) {
           padding: 6px 8px;
           font-size: 13px;
           transition: all 0.2s ease;
-          text-align: center;
           &:hover {
             border-color: rgba(255, 255, 255, 0.3);
           }
@@ -1414,86 +1331,6 @@ function AppPaneNodes({ app }) {
             background: rgba(20, 20, 25, 0.8);
             color: rgba(255, 255, 255, 0.5);
             cursor: not-allowed;
-          }
-          /* Hide browser arrows */
-          &::-webkit-inner-spin-button, 
-          &::-webkit-outer-spin-button { 
-            -webkit-appearance: none; 
-            margin: 0; 
-          }
-          -moz-appearance: textfield; /* Firefox */
-        }
-        .transform-button {
-          width: 28px;
-          height: 28px;
-          background: rgba(30, 30, 40, 0.9);
-          color: rgba(255, 255, 255, 0.8);
-          border: 1px solid rgba(255, 255, 255, 0.15);
-          border-radius: 4px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          cursor: pointer;
-          font-size: 16px;
-          font-weight: bold;
-          transition: all 0.15s ease;
-          margin: 0 4px;
-          flex-shrink: 0;
-          
-          &:hover {
-            background: rgba(50, 50, 60, 0.9);
-            color: white;
-            border-color: rgba(255, 255, 255, 0.3);
-          }
-          
-          &:active {
-            background: rgba(0, 167, 255, 0.3);
-            transform: scale(0.95);
-          }
-          
-          &.minus {
-            margin-left: 0;
-          }
-          
-          &.plus {
-            margin-right: 0;
-          }
-          
-          &:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-            &:hover, &:active {
-              background: rgba(30, 30, 40, 0.9);
-              color: rgba(255, 255, 255, 0.8);
-              border-color: rgba(255, 255, 255, 0.15);
-              transform: none;
-            }
-          }
-        }
-        .precision-control {
-          display: flex;
-          justify-content: flex-end;
-          margin-top: 8px;
-          
-          .precision-button {
-            background: rgba(30, 30, 40, 0.7);
-            color: rgba(255, 255, 255, 0.7);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 4px;
-            padding: 4px 8px;
-            font-size: 11px;
-            cursor: pointer;
-            transition: all 0.15s ease;
-            
-            &:hover {
-              background: rgba(40, 40, 50, 0.8);
-              color: white;
-              border-color: rgba(255, 255, 255, 0.2);
-            }
-            
-            &:active {
-              background: rgba(0, 167, 255, 0.2);
-            }
           }
         }
         /* Style for amain scrollable area */
@@ -1554,7 +1391,7 @@ function AppPaneNodes({ app }) {
             hasProperty(selectedNode, 'scale')) && (
             <div className="property-section">Transform</div>
           )}
-          
+
           {/* Position */}
           {hasProperty(selectedNode, 'position') && (
             <HierarchyDetail 
@@ -1604,8 +1441,8 @@ function AppPaneNodes({ app }) {
               />
               
               {hasProperty(selectedNode.material, 'color') && (
-                <HierarchyDetail 
-                  label='Color' 
+                <HierarchyDetail
+                  label='Color'
                   value={formatColor(selectedNode.material.color)} 
                   isComponent 
                 />
@@ -1750,7 +1587,7 @@ const nodeIcons = {
 }
 
 function renderHierarchy(node, depth = 0, selectedNode, setSelectedNode, expandedNodes, toggleNode) {
-  if (!node) return null
+    if (!node) return null
 
   // Get Icon component based on node type
   const Icon = nodeIcons[node.name] || nodeIcons.default
@@ -1762,18 +1599,18 @@ function renderHierarchy(node, depth = 0, selectedNode, setSelectedNode, expande
   const hasChildren = node.children && node.children.length > 0
   
   // Check if this node is the selected one
-  const isSelected = selectedNode?.id === node.id
+    const isSelected = selectedNode?.id === node.id
 
-  return (
-    <div key={node.id}>
-      <div
-        className={cls('anodes-item', {
-          'anodes-item-indent': depth > 0,
-          selected: isSelected,
-        })}
-        style={{ marginLeft: depth * 20 }}
-        onClick={() => setSelectedNode(node)}
-      >
+    return (
+      <div key={node.id}>
+        <div
+          className={cls('anodes-item', {
+            'anodes-item-indent': depth > 0,
+            selected: isSelected,
+          })}
+          style={{ marginLeft: depth * 20 }}
+          onClick={() => setSelectedNode(node)}
+        >
         <div style={{ width: 16, display: 'flex', justifyContent: 'center' }}>
           {hasChildren && (
             <ChevronDown 
@@ -1797,8 +1634,8 @@ function renderHierarchy(node, depth = 0, selectedNode, setSelectedNode, expande
       {isExpanded && hasChildren && node.children.map(child => 
         renderHierarchy(child, depth + 1, selectedNode, setSelectedNode, expandedNodes, toggleNode)
       )}
-    </div>
-  )
+      </div>
+    )
 }
 
 function PlayerPane({ world, player }) {
@@ -1839,15 +1676,13 @@ const fieldTypes = {
   switch: FieldSwitch,
   dropdown: FieldDropdown,
   range: FieldRange,
-  button: FieldButton,
-  buttons: FieldButtons,
 }
 
 function Field({ world, props, field, value, modify }) {
   if (field.hidden) {
     return null
   }
-  if (field.when && isArray(field.when)) {
+  if (field.when) {
     for (const rule of field.when) {
       if (rule.op === 'eq' && props[rule.key] !== rule.value) {
         return null
@@ -1923,7 +1758,6 @@ function FieldNumber({ world, field, value, modify }) {
   return (
     <FieldWithLabel label={field.label}>
       <InputNumber
-        placeholder={field.placeholder}
         value={value}
         onChange={value => modify(field.key, value)}
         dp={field.dp}
@@ -1971,65 +1805,6 @@ function FieldDropdown({ world, field, value, modify }) {
   return (
     <FieldWithLabel label={field.label}>
       <InputDropdown options={field.options} value={value} onChange={value => modify(field.key, value)} />
-    </FieldWithLabel>
-  )
-}
-
-function FieldButton({ world, field, value, modify }) {
-  return (
-    <FieldWithLabel label={''}>
-      <div
-        css={css`
-          background: #252630;
-          border-radius: 10px;
-          height: 34px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 14px;
-          &:hover {
-            cursor: pointer;
-            background: #30323e;
-          }
-        `}
-        onClick={field.onClick}
-      >
-        <span>{field.label}</span>
-      </div>
-    </FieldWithLabel>
-  )
-}
-
-function FieldButtons({ world, field, value, modify }) {
-  return (
-    <FieldWithLabel label={field.label}>
-      <div
-        css={css`
-          height: 34px;
-          display: flex;
-          gap: 5px;
-          .fieldbuttons-button {
-            flex: 1;
-            background: #252630;
-            border-radius: 10px;
-            height: 34px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 14px;
-            &:hover {
-              cursor: pointer;
-              background: #30323e;
-            }
-          }
-        `}
-      >
-        {field.buttons.map(button => (
-          <div key={button.label} className='fieldbuttons-button' onClick={button.onClick}>
-            <span>{button.label}</span>
-          </div>
-        ))}
-      </div>
     </FieldWithLabel>
   )
 }

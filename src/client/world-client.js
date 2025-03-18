@@ -2,18 +2,39 @@
 // import '../core/lockdown'
 import * as THREE from 'three'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { css } from '@firebolt-dev/css'
 
 import { createClientWorld } from '../core/createClientWorld'
 import { loadPhysX } from './loadPhysX'
 import { CoreUI } from './components/CoreUI'
+import { WorldProvider } from './WorldContext'
 
 export { System } from '../core/systems/System'
+
+const styles = {
+  app: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: '100vh'
+  },
+  viewport: {
+    position: 'absolute',
+    inset: 0
+  },
+  ui: {
+    position: 'absolute',
+    inset: 0,
+    pointerEvents: 'none',
+    userSelect: 'none'
+  }
+}
 
 export function Client({ wsUrl, onSetup }) {
   const viewportRef = useRef()
   const uiRef = useRef()
   const world = useMemo(() => createClientWorld(), [])
+  
   useEffect(() => {
     const viewport = viewportRef.current
     const ui = uiRef.current
@@ -32,33 +53,16 @@ export function Client({ wsUrl, onSetup }) {
     onSetup?.(world, config)
     world.init(config)
   }, [])
+
   return (
-    <div
-      className='App'
-      css={css`
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        height: 100vh;
-        height: 100dvh;
-        .App__viewport {
-          position: absolute;
-          inset: 0;
-        }
-        .App__ui {
-          position: absolute;
-          inset: 0;
-          pointer-events: none;
-          user-select: none;
-        }
-      `}
-    >
-      <div className='App__viewport' ref={viewportRef}>
-        <div className='App__ui' ref={uiRef}>
-          <CoreUI world={world} />
+    <WorldProvider world={world}>
+      <div className='App' style={styles.app}>
+        <div className='App__viewport' ref={viewportRef} style={styles.viewport}>
+          <div className='App__ui' ref={uiRef} style={styles.ui}>
+            <CoreUI world={world} />
+          </div>
         </div>
       </div>
-    </div>
+    </WorldProvider>
   )
 }
