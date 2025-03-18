@@ -12,7 +12,7 @@ import { DEG2RAD, RAD2DEG } from '../extras/general'
 
 const FORWARD = new THREE.Vector3(0, 0, -1)
 const SNAP_DISTANCE = 1
-const SNAP_DEGREES = 5
+const SNAP_DEGREES = 1
 const PROJECT_SPEED = 10
 const PROJECT_MIN = 3
 const PROJECT_MAX = 50
@@ -45,8 +45,9 @@ export class ClientBuilder extends System {
     this.target = new THREE.Object3D()
     this.target.rotation.reorder('YXZ')
     this.lastMoveSendTime = 0
-
-    this.undos = []
+    
+    // Add current rotation axis tracking
+    this.rotationAxis = 'y' // Can be 'x', 'y', or 'z'
 
     this.dropTarget = null
     this.file = null
@@ -382,15 +383,6 @@ export class ClientBuilder extends System {
 
   start() {
     this.control = this.world.controls.bind({ priority: ControlPriorities.BUILDER })
-    this.control.mouseLeft.onPress = () => {
-      // pointer lock requires user-gesture in safari
-      // so this can't be done during update cycle
-      if (!this.control.pointer.locked) {
-        this.control.pointer.lock()
-        this.justPointerLocked = true
-        return true // capture
-      }
-    }
     
     // Now that the world is fully initialized, we can create and add gizmos
     if (this.world.scene) {
@@ -450,7 +442,7 @@ export class ClientBuilder extends System {
       this.toggle()
     }
     // deselect if dead
-    if (this.selected?.destroyed) {
+    if (this.selected?.dead) {
       this.select(null)
     }
     // deselect if stolen
@@ -468,15 +460,6 @@ export class ClientBuilder extends System {
         this.select(null)
         this.world.emit('inspect', entity)
         return // Add return to prevent duplicate handling
-      }
-    }
-    // inspect out of pointer-lock
-    if (!this.selected && !this.control.pointer.locked && this.control.mouseRight.pressed) {
-      const entity = this.getEntityAtPointer()
-      if (entity) {
-        this.select(null)
-        this.control.pointer.unlock()
-        this.world.emit('inspect', entity)
       }
     }
     
@@ -536,11 +519,6 @@ export class ClientBuilder extends System {
       const entity = this.getEntityAtPointer()
         
       if (entity?.isApp && !entity.data.pinned) {
-        this.addUndo({
-          name: 'move-entity',
-          entityId: entity.data.id,
-          position: entity.data.position.slice(),
-        })
         this.select(entity)
       }
     }
@@ -593,10 +571,6 @@ export class ClientBuilder extends System {
         }
         const dup = this.world.entities.add(data, true)
         this.select(dup)
-        this.addUndo({
-          name: 'remove-entity',
-          entityId: data.id,
-        })
       }
     }
     
@@ -605,21 +579,79 @@ export class ClientBuilder extends System {
       const entity = this.selected || this.getEntityAtPointer()
       if (entity?.isApp && !entity.data.pinned) {
         this.select(null)
-        this.addUndo({
-          name: 'add-entity',
-          data: cloneDeep(entity.data),
-        })
         entity?.destroy(true)
       }
-    }
-    // undo
-    if (this.control.keyZ.pressed && (this.control.metaLeft.down || this.control.controlLeft.down)) {
-      this.undo()
     }
     
     if (this.selected) {
       const app = this.selected
       const hit = this.getHitAtPointer(app, true)
+      
+      // D-pad Up/Down for Y-axis movement with more precise increments
+      if (this.control.gamepadDPadUp?.down) {
+        const newY = Math.round((app.root.position.y + 0.1) * 10) / 10
+        app.root.position.y = newY
+        this.target.position.y = newY
+        // Force update and sync
+        app.root.clean()
+        this.world.network.send('entityModified', {
+          id: app.data.id,
+          position: app.root.position.toArray(),
+          quaternion: app.root.quaternion.toArray(),
+        })
+      }
+      if (this.control.gamepadDPadDown?.down) {
+        const newY = Math.round((app.root.position.y - 0.1) * 10) / 10
+        app.root.position.y = newY
+        this.target.position.y = newY
+        // Force update and sync
+        app.root.clean()
+        this.world.network.send('entityModified', {
+          id: app.data.id,
+          position: app.root.position.toArray(),
+          quaternion: app.root.quaternion.toArray(),
+        })
+      }
+
+      // D-pad Left/Right for rotation axis switching
+      if (this.control.gamepadDPadLeft?.pressed) {
+        // Cycle axis backwards: y -> x -> z -> y
+        switch(this.rotationAxis) {
+          case 'y': this.rotationAxis = 'z'; break;
+          case 'z': this.rotationAxis = 'x'; break;
+          case 'x': this.rotationAxis = 'y'; break;
+          default: this.rotationAxis = 'y';
+        }
+        this.world.emit('toast', `Rotation Axis: ${this.rotationAxis.toUpperCase()}`)
+      }
+      if (this.control.gamepadDPadRight?.pressed) {
+        // Cycle axis forwards: y -> z -> x -> y
+        switch(this.rotationAxis) {
+          case 'y': this.rotationAxis = 'x'; break;
+          case 'x': this.rotationAxis = 'z'; break;
+          case 'z': this.rotationAxis = 'y'; break;
+          default: this.rotationAxis = 'y';
+        }
+        this.world.emit('toast', `Rotation Axis: ${this.rotationAxis.toUpperCase()}`)
+      }
+
+      // R1/L1 rotation on current axis
+      if (this.control.gamepadR1?.down || this.control.gamepadL1?.down) {
+        const delta = this.control.gamepadR1?.down ? DEG2RAD : -DEG2RAD;
+        
+        if (this.rotationAxis === 'x') {
+          // For X-axis, use quaternion rotation to avoid gimbal lock
+          const rotationQuaternion = new THREE.Quaternion();
+          rotationQuaternion.setFromAxisAngle(new THREE.Vector3(1, 0, 0), delta);
+          app.root.quaternion.multiply(rotationQuaternion);
+          this.target.quaternion.copy(app.root.quaternion);
+        } else {
+          // Y and Z axes can be handled normally
+          app.root.rotation[this.rotationAxis] += delta;
+          this.target.rotation[this.rotationAxis] = app.root.rotation[this.rotationAxis];
+        }
+      }
+
       // place at distance
       const camPos = this.world.rig.position
       const camDir = v1.copy(FORWARD).applyQuaternion(this.world.rig.quaternion)
@@ -632,10 +664,19 @@ export class ClientBuilder extends System {
         this.target.position.copy(camPos).add(camDir.multiplyScalar(this.target.limit))
       }
       
-      // Push and pull functionality has been disabled (C and F keys)
+      // Handle shift + scroll wheel Y-axis movement
+      if (this.control.shiftLeft.down) {
+        const yDelta = this.control.scrollDelta.value * 0.1
+        const newY = Math.round((app.root.position.y + yDelta) * 10) / 10
+        app.root.position.y = newY
+        this.target.position.y = newY
+      } else {
+        // Normal rotation behavior - exactly 1 degree per scroll increment
+        const rotationDelta = Math.sign(this.control.scrollDelta.value) * DEG2RAD
+        app.root.rotation.y += rotationDelta
+        this.target.rotation.y = app.root.rotation.y
+      }
       
-      // if not holding shift, mouse wheel rotates
-      this.target.rotation.y += this.control.scrollDelta.value * 0.1 * delta
       // apply movement
       app.root.position.copy(this.target.position)
       app.root.quaternion.copy(this.target.quaternion)

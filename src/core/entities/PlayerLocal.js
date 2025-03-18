@@ -22,6 +22,7 @@ const MIN_ZOOM = 2
 const MAX_ZOOM = 100 // 16
 const STICK_MAX_DISTANCE = 50
 const DEFAULT_CAM_HEIGHT = 1.2
+const CAMERA_DISTANCES = [2, 4, 8, 16]
 
 const v1 = new THREE.Vector3()
 const v2 = new THREE.Vector3()
@@ -42,6 +43,7 @@ export class PlayerLocal extends Entity {
   constructor(world, data, local) {
     super(world, data, local)
     this.isPlayer = true
+    this.cameraDistanceIndex = 0
     this.init()
   }
 
@@ -63,9 +65,6 @@ export class PlayerLocal extends Entity {
     this.groundNormal = new THREE.Vector3().copy(UP)
     this.groundSweepRadius = this.capsuleRadius - 0.01 // slighty smaller than player
     this.groundSweepGeometry = new PHYSX.PxSphereGeometry(this.groundSweepRadius)
-
-    this.pushForce = null
-    this.pushForceInit = false
 
     this.slipping = false
 
@@ -96,10 +95,10 @@ export class PlayerLocal extends Entity {
     this.base.position.fromArray(this.data.position)
     this.base.quaternion.fromArray(this.data.quaternion)
 
-    this.aura = createNode('group')
+    // this.nametag = createNode({ name: 'nametag', label: this.data.name, health: this.data.health, active: false })
+    // this.base.add(this.nametag)
 
-    this.nametag = createNode('nametag', { label: '', health: this.data.health, active: false })
-    this.aura.add(this.nametag)
+    this.aura = createNode('group')
 
     this.bubble = createNode('ui', {
       width: 300,
@@ -162,11 +161,11 @@ export class PlayerLocal extends Entity {
         if (this.avatar) this.avatar.deactivate()
         this.avatar = src.toNodes().get('avatar')
         this.base.add(this.avatar)
-        this.nametag.position.y = this.avatar.getHeadToHeight() + 0.2
+        // this.nametag.position.y = this.avatar.height + 0.2
         this.bubble.position.y = this.avatar.getHeadToHeight() + 0.2
-        if (!this.bubble.active) {
-          this.nametag.active = true
-        }
+        // if (!this.bubble.active) {
+        //   this.nametag.active = true
+        // }
         this.avatarUrl = avatarUrl
         this.camHeight = this.avatar.height * 0.95
       })
@@ -230,14 +229,14 @@ export class PlayerLocal extends Entity {
     // For now the best solution is to just add a sphere right in the center of our capsule to keep that problem at bay.
     let shape2
     {
-      // const geometry = new PHYSX.PxSphereGeometry(radius)
-      // shape2 = this.world.physics.physics.createShape(geometry, this.material, true, flags)
-      // shape2.setQueryFilterData(filterData)
-      // shape2.setSimulationFilterData(filterData)
-      // const pose = new PHYSX.PxTransform(PHYSX.PxIDENTITYEnum.PxIdentity)
-      // v1.set(0, halfHeight + radius, 0).toPxTransform(pose)
-      // shape2.setLocalPose(pose)
-      // this.capsule.attachShape(shape2)
+      const geometry = new PHYSX.PxSphereGeometry(radius)
+      shape2 = this.world.physics.physics.createShape(geometry, this.material, true, flags)
+      shape2.setQueryFilterData(filterData)
+      shape2.setSimulationFilterData(filterData)
+      const pose = new PHYSX.PxTransform(PHYSX.PxIDENTITYEnum.PxIdentity)
+      v1.set(0, halfHeight + radius, 0).toPxTransform(pose)
+      shape2.setLocalPose(pose)
+      this.capsule.attachShape(shape2)
     }
     this.capsuleHandle = this.world.physics.addActor(this.capsule, {
       tag: null,
@@ -269,12 +268,58 @@ export class PlayerLocal extends Entity {
           this.pan = null
         }
       },
+      onRelease: () => {
+        this.control = null
+      },
     })
     this.control.camera.write = true
     this.control.camera.position.copy(this.cam.position)
     this.control.camera.quaternion.copy(this.cam.quaternion)
     this.control.camera.zoom = this.cam.zoom
-    // this.control.setActions([{ type: 'space', label: 'Jump / Double-Jump' }])
+
+    // Set up gamepad actions
+    this.control.setActions([
+      { type: 'jump', label: 'Jump' },
+      { type: 'sprint', label: 'Sprint' },
+      { type: 'crouch', label: 'Crouch' },
+      { type: 'toggleBuildMode', label: 'Toggle Build Mode' },
+      { type: 'mouseLeft', label: 'Grab/Place' },
+      { type: 'inspect', label: 'Inspect' },
+      { type: 'cameraControl', label: 'Camera Control' },
+      { type: 'duplicate', label: 'Duplicate' },
+      { type: 'pin', label: 'Pin' },
+      { type: 'delete', label: 'Delete' },
+      { type: 'cycleGizmo', label: 'Cycle Gizmo' }
+    ])
+
+    // Add gamepad controls
+    this.control.gamepadLeftStick = { value: { x: 0, z: 0 } }
+    this.control.gamepadRightStick = { value: { x: 0, z: 0 } }
+    this.control.gamepadA = { pressed: false, down: false }
+    this.control.gamepadB = { pressed: false, down: false }
+    this.control.gamepadX = { pressed: false, down: false }
+    this.control.gamepadY = { pressed: false, down: false }
+    this.control.gamepadL1 = { pressed: false, down: false }
+    this.control.gamepadR1 = { pressed: false, down: false }
+    this.control.gamepadL2 = { pressed: false, down: false }
+    this.control.gamepadR2 = { pressed: false, down: false }
+    this.control.gamepadDPadUp = { pressed: false, down: false }
+    this.control.gamepadDPadDown = { pressed: false, down: false }
+    this.control.gamepadDPadLeft = { pressed: false, down: false }
+    this.control.gamepadDPadRight = { pressed: false, down: false }
+    this.control.gamepadR3 = { pressed: false, down: false }
+    this.control.gamepadL3 = { pressed: false, down: false }
+    this.control.gamepadSelect = { 
+      pressed: false, 
+      down: false,
+      onPress: () => {
+        // Toggle build mode when select is pressed
+        if (this.world.builder) {
+          this.world.builder.toggle()
+        }
+      }
+    }
+    this.control.gamepadStart = { pressed: false, down: false }
   }
 
   toggleFlying() {
@@ -322,7 +367,7 @@ export class PlayerLocal extends Entity {
         const pose = this.capsule.getGlobalPose()
         const origin = v1.copy(pose.p)
         origin.y += 0.2
-        const hitMask = Layers.environment.group | Layers.prop.group
+        const hitMask = Layers.environment.group | Layers.prop.group | Layers.tool.group
         const hit = this.world.physics.raycast(origin, DOWN, 2, hitMask)
         let actor = hit?.handle?.actor || null
         // if we found a new platform, set it up for tracking
@@ -387,7 +432,7 @@ export class PlayerLocal extends Entity {
         origin.y += this.groundSweepRadius + 0.12 // move up inside player + a bit
         const direction = DOWN
         const maxDistance = 0.12 + 0.1 // outside player + a bit more
-        const hitMask = Layers.environment.group | Layers.prop.group
+        const hitMask = Layers.environment.group | Layers.prop.group | Layers.tool.group
         sweepHit = this.world.physics.sweep(geometry, origin, direction, maxDistance, hitMask)
       }
 
@@ -467,8 +512,6 @@ export class PlayerLocal extends Entity {
       if (this.jumping && this.grounded) {
         this.jumping = false
       }
-
-      // if airJumping and we're now on the ground, clear it
       if (this.airJumped && this.grounded) {
         this.airJumped = false
         this.airJumping = false
@@ -527,35 +570,6 @@ export class PlayerLocal extends Entity {
         // increase downward velocity to prevent sliding upward when walking at a slope
         velocity.y -= 0.5
       }
-
-      // apply additional push force
-      if (this.pushForce) {
-        if (!this.pushForceInit) {
-          this.pushForceInit = true
-          // if we're pushing up, act like a jump so we don't stick to the ground
-          if (this.pushForce.y) {
-            this.jumped = true
-            // ensure other stuff is reset
-            this.jumping = false
-            this.falling = false
-            this.airJumped = false
-            this.airJumping = false
-          }
-        }
-        velocity.add(this.pushForce)
-        const drag = 20
-        const decayFactor = 1 - drag * delta
-        if (decayFactor < 0) {
-          // if drag * delta > 1, just set to zero
-          this.pushForce.set(0, 0, 0)
-        } else {
-          this.pushForce.multiplyScalar(Math.max(decayFactor, 0))
-        }
-        if (this.pushForce.length() < 0.01) {
-          this.pushForce = null
-        }
-      }
-
       this.capsule.setLinearVelocity(velocity.toPxVec3())
 
       // apply move force, projected onto ground normal
@@ -575,7 +589,14 @@ export class PlayerLocal extends Entity {
       // ground/air jump
       const shouldJump =
         this.grounded && !this.jumping && this.jumpDown && !this.data.effect?.snare && !this.data.effect?.freeze
-      const shouldAirJump = !this.grounded && !this.airJumped && this.jumpPressed && !this.world.builder.enabled
+      const shouldAirJump = 
+        !this.grounded && 
+        !this.airJumped && 
+        this.jumpPressed && 
+        !this.world.builder.enabled && 
+        !this.data.effect?.snare && 
+        !this.data.effect?.freeze
+
       if (shouldJump || shouldAirJump) {
         // calc velocity needed to reach jump height
         let jumpVelocity = Math.sqrt(2 * this.effectiveGravity * this.jumpHeight)
@@ -587,6 +608,8 @@ export class PlayerLocal extends Entity {
         // ground jump init (we haven't left the ground yet)
         if (shouldJump) {
           this.jumped = true
+          this.jumping = false
+          this.airJumped = false
         }
         // air jump init
         if (shouldAirJump) {
@@ -649,6 +672,50 @@ export class PlayerLocal extends Entity {
     const freeze = this.data.effect?.freeze
     const anchor = this.getAnchorMatrix()
 
+    // Handle build mode toggle with select button or tab key
+    if (this.control.gamepadSelect?.pressed || this.control.tab?.pressed) {
+      if (hasRole(this.data.roles, 'builder')) {
+        this.world.builder.toggle()
+      }
+    }
+
+    // Get keybinds from preferences
+    const keybinds = this.world.prefs.keybinds || {}
+    const moveForward = keybinds.moveForward || 'keyW'
+    const moveBackward = keybinds.moveBackward || 'keyS'
+    const moveLeft = keybinds.moveLeft || 'keyA'
+    const moveRight = keybinds.moveRight || 'keyD'
+    const jump = keybinds.jump || 'space'
+    const sprint = keybinds.sprint || 'shiftLeft'
+
+    // Handle camera distance cycling with right stick click
+    if (this.control.gamepadR3?.pressed) {
+      this.cameraDistanceIndex = (this.cameraDistanceIndex + 1) % CAMERA_DISTANCES.length
+      this.cam.zoom = CAMERA_DISTANCES[this.cameraDistanceIndex]
+    }
+
+    // Handle sprint with left stick click - keep track of sprint state
+    if (this.control.gamepadL3?.pressed) {
+      this.sprintEnabled = true
+    }
+    if (this.control.gamepadL3?.released) {
+      this.sprintEnabled = false
+    }
+
+    // Handle jumping with gamepad A button or keyboard
+    if (this.control.gamepadA?.pressed || this.control[jump].pressed) {
+      this.jumpDown = true
+      this.jumpPressed = true
+    }
+    if (this.control.gamepadA?.released || this.control[jump].released) {
+      this.jumpDown = false
+    }
+
+    // watch jump presses to either fly or air-jump
+    if (!this.jumpDown) {
+      this.jumpDown = isXR ? this.control.xrRightBtn1.down : this.control[jump].down || this.control.gamepadA?.down
+    }
+
     // update cam look direction
     if (isXR) {
       // in xr clear camera rotation (handled internally)
@@ -676,12 +743,6 @@ export class PlayerLocal extends Entity {
       this.cam.zoom = clamp(this.cam.zoom, MIN_ZOOM, MAX_ZOOM)
     }
 
-    // watch jump presses to either fly or air-jump
-    this.jumpDown = isXR ? this.control.xrRightBtn1.down : this.control.space.down
-    if (isXR ? this.control.xrRightBtn1.pressed : this.control.space.pressed) {
-      this.jumpPressed = true
-    }
-
     // get our movement direction
     this.moveDir.set(0, 0, 0)
     if (isXR) {
@@ -706,11 +767,26 @@ export class PlayerLocal extends Entity {
       this.moveDir.x = stickX
       this.moveDir.z = stickY
     } else {
-      // otherwise use keyboard
-      if (this.control.keyW.down || this.control.arrowUp.down) this.moveDir.z -= 1
-      if (this.control.keyS.down || this.control.arrowDown.down) this.moveDir.z += 1
-      if (this.control.keyA.down || this.control.arrowLeft.down) this.moveDir.x -= 1
-      if (this.control.keyD.down || this.control.arrowRight.down) this.moveDir.x += 1
+      // Check gamepad input first, then fall back to keyboard
+      const leftStick = this.control.gamepadLeftStick
+      if (leftStick && (leftStick.value.x !== 0 || leftStick.value.z !== 0)) {
+        this.moveDir.x = leftStick.value.x
+        this.moveDir.z = leftStick.value.z
+      } else {
+        // Existing keyboard controls
+        if (this.control[moveForward].down || this.control.arrowUp.down) this.moveDir.z -= 1
+        if (this.control[moveBackward].down || this.control.arrowDown.down) this.moveDir.z += 1
+        if (this.control[moveLeft].down || this.control.arrowLeft.down) this.moveDir.x -= 1
+        if (this.control[moveRight].down || this.control.arrowRight.down) this.moveDir.x += 1
+      }
+
+      // Handle D-pad input as alternative movement ONLY when not in build mode
+      if (!this.world.builder?.enabled) {
+        if (this.control.gamepadDPadUp?.down) this.moveDir.z -= 1
+        if (this.control.gamepadDPadDown?.down) this.moveDir.z += 1
+        if (this.control.gamepadDPadLeft?.down) this.moveDir.x -= 1
+        if (this.control.gamepadDPadRight?.down) this.moveDir.x += 1
+      }
     }
 
     // we're moving if direction is set
@@ -732,8 +808,8 @@ export class PlayerLocal extends Entity {
       // touch/xr joysticks at full extent
       this.running = this.moving && this.moveDir.length() > 0.5
     } else {
-      // or keyboard shift key
-      this.running = this.moving && (this.control.shiftLeft.down || this.control.shiftRight.down)
+      // keyboard shift key, gamepad L3, or custom keybind
+      this.running = (this.moving && (this.control[sprint].down || this.sprintEnabled))
     }
 
     // normalize direction (also prevents surfing)
@@ -858,6 +934,27 @@ export class PlayerLocal extends Entity {
         this.setEffect(null)
       }
     }
+
+    // Handle camera rotation with right stick
+    const rightStick = this.control.gamepadRightStick
+    if (rightStick && (rightStick.value.x !== 0 || rightStick.value.z !== 0)) {
+      // Match touchscreen behavior for camera rotation
+      const rotationSpeed = 2.5
+      this.cam.rotation.y -= rightStick.value.x * rotationSpeed * delta
+      
+      // Vertical camera rotation - match touchscreen behavior
+      const verticalRotation = this.cam.rotation.x - rightStick.value.z * rotationSpeed * delta
+      this.cam.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, verticalRotation))
+    }
+
+    // Handle camera zoom with triggers
+    if (this.control.gamepadL2?.down || this.control.gamepadR2?.down) {
+      const zoomSpeed = 10
+      const zoomIn = this.control.gamepadL2?.down
+      const zoomOut = this.control.gamepadR2?.down
+      const newZoom = this.world.camera.position.z + (zoomOut ? zoomSpeed : zoomIn ? -zoomSpeed : 0) * delta
+      this.world.camera.position.z = clamp(newZoom, MIN_ZOOM, MAX_ZOOM)
+    }
   }
 
   lateUpdate(delta) {
@@ -924,21 +1021,6 @@ export class PlayerLocal extends Entity {
     })
   }
 
-  push(force) {
-    force = v1.fromArray(force)
-    // squash vertical to emulate what our huge horizontal drag coefficient does
-    // force.y *= 0.1
-    // add to any existing push
-    if (this.pushForce) {
-      this.pushForce.add(force)
-    }
-    // otherwise start push
-    else {
-      this.pushForce = force.clone()
-      this.pushForceInit = false
-    }
-  }
-
   setSessionAvatar(avatar) {
     this.data.sessionAvatar = avatar
     this.applyAvatar()
@@ -949,13 +1031,13 @@ export class PlayerLocal extends Entity {
   }
 
   chat(msg) {
-    this.nametag.active = false
+    // this.nametag.active = false
     this.bubbleText.value = msg
     this.bubble.active = true
     clearTimeout(this.chatTimer)
     this.chatTimer = setTimeout(() => {
       this.bubble.active = false
-      this.nametag.active = true
+      // this.nametag.active = true
     }, 5000)
   }
 
@@ -968,9 +1050,6 @@ export class PlayerLocal extends Entity {
     }
     if (data.hasOwnProperty('health')) {
       this.data.health = data.health
-      this.nametag.health = data.health
-      this.world.events.emit('health', { playerId: this.data.id, health: data.health })
-      console.log('modify', data.health)
       // changed = true
     }
     if (data.hasOwnProperty('avatar')) {

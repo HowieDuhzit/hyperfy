@@ -29,6 +29,46 @@ import { ControlPriorities } from '../../core/extras/ControlPriorities'
 import { AppsPane } from './AppsPane'
 import { SettingsPane } from './SettingsPane'
 
+// Add gamepad icon imports
+const XBOX_ICONS = {
+  A: 'assets/controlIcons/Xbox/T_xb1_v3_btn_a.png',
+  B: 'assets/controlIcons/Xbox/T_xb1_v3_btn_b.png',
+  X: 'assets/controlIcons/Xbox/T_xb1_v3_btn_x.png',
+  Y: 'assets/controlIcons/Xbox/T_xb1_v3_btn_y.png',
+  LB: 'assets/controlIcons/Xbox/T_xb1_v3_trigger_lb.png',
+  RB: 'assets/controlIcons/Xbox/T_xb1_v3_trigger_rb.png',
+  SELECT: 'assets/controlIcons/Xbox/T_xb1_v3_btn_view.png',
+  START: 'assets/controlIcons/Xbox/T_xb1_v3_btn_menu.png',
+  L_STICK: 'assets/controlIcons/Xbox/T_xb1_v3_analog_l.png',
+  R_STICK: 'assets/controlIcons/Xbox/T_xb1_v3_analog_r.png'
+}
+
+const PS_ICONS = {
+  A: 'assets/controlIcons/PS/T_ps4_v3_btn_x.png',
+  B: 'assets/controlIcons/PS/T_ps4_v3_btn_circle.png',
+  X: 'assets/controlIcons/PS/T_ps4_v3_btn_square.png',
+  Y: 'assets/controlIcons/PS/T_ps4_v3_btn_triangle.png',
+  LB: 'assets/controlIcons/PS/T_ps4_v3_trigger_l1.png',
+  RB: 'assets/controlIcons/PS/T_ps4_v3_trigger_r1.png',
+  SELECT: 'assets/controlIcons/PS/T_ps4_v3_share.png',
+  START: 'assets/controlIcons/PS/T_ps4_v3_options.png',
+  L_STICK: 'assets/controlIcons/PS/T_ps4_v3_analog_l.png',
+  R_STICK: 'assets/controlIcons/PS/T_ps4_v3_analog_r.png'
+}
+
+const SWITCH_ICONS = {
+  A: 'assets/controlIcons/Switch/T_switch_v3_btn_a.png',
+  B: 'assets/controlIcons/Switch/T_switch_v3_btn_b.png',
+  X: 'assets/controlIcons/Switch/T_switch_v3_btn_x.png',
+  Y: 'assets/controlIcons/Switch/T_switch_v3_btn_y.png',
+  LB: 'assets/controlIcons/Switch/T_switch_v3_trigger_l.png',
+  RB: 'assets/controlIcons/Switch/T_switch_v3_trigger_r.png',
+  SELECT: 'assets/controlIcons/Switch/T_switch_v3_btn_minus.png',
+  START: 'assets/controlIcons/Switch/T_switch_v3_btn_plus.png',
+  L_STICK: 'assets/controlIcons/Switch/T_switch_v3_analog_l.png',
+  R_STICK: 'assets/controlIcons/Switch/T_switch_v3_analog_r.png'
+}
+
 export function CoreUI({ world }) {
   const [ref, width, height] = useElemSize()
   return (
@@ -84,6 +124,9 @@ function Content({ world, width, height }) {
     elem.addEventListener('pointerdown', onEvent)
     elem.addEventListener('pointermove', onEvent)
     elem.addEventListener('pointerup', onEvent)
+    elem.addEventListener('touchstart', onEvent)
+    // elem.addEventListener('touchmove', onEvent)
+    // elem.addEventListener('touchend', onEvent)
   }, [])
   return (
     <div
@@ -108,7 +151,14 @@ function Content({ world, width, height }) {
           toggleApps={() => setApps(!apps)}
         />
       )}
-      {settings && <SettingsPane world={world} player={player} close={() => setSettings(false)} />}
+      {settings && (
+        <SettingsPane 
+          world={world} 
+          player={player} 
+          close={() => setSettings(false)} 
+          gamepadManager={world.gamepadManager} 
+        />
+      )}
       {apps && <AppsPane world={world} close={() => setApps(false)} />}
       {!ready && <LoadingOverlay />}
       {kicked && <KickedOverlay code={kicked} />}
@@ -121,9 +171,62 @@ function Side({ world, player, toggleSettings, toggleApps }) {
   const inputRef = useRef()
   const [msg, setMsg] = useState('')
   const [chat, setChat] = useState(false)
+  const [isGamepadActive, setIsGamepadActive] = useState(false)
   const canBuild = useMemo(() => {
     return player && hasRole(player.data.roles, 'admin', 'builder')
   }, [player])
+
+  useEffect(() => {
+    // Check for any gamepad input (sticks or buttons)
+    const checkGamepad = () => {
+      const gamepad = world.controls.gamepadManager?.gamepads.get(0)
+      if (!gamepad) {
+        setIsGamepadActive(false)
+        return
+      }
+
+      // Check sticks
+      const leftStick = world.controls.gamepadLeftStick?.value || { x: 0, z: 0 }
+      const rightStick = world.controls.gamepadRightStick?.value || { x: 0, z: 0 }
+      
+      // Check common buttons
+      const buttons = [
+        world.controls.gamepadA?.pressed,
+        world.controls.gamepadB?.pressed,
+        world.controls.gamepadX?.pressed,
+        world.controls.gamepadY?.pressed,
+        world.controls.gamepadL1?.pressed,
+        world.controls.gamepadR1?.pressed,
+        world.controls.gamepadSelect?.pressed,
+        world.controls.gamepadStart?.pressed
+      ]
+
+      const hasStickInput = Math.abs(leftStick.x) > 0.1 || Math.abs(leftStick.z) > 0.1 || 
+                           Math.abs(rightStick.x) > 0.1 || Math.abs(rightStick.z) > 0.1
+
+      const hasButtonInput = buttons.some(Boolean)
+
+      // If we detect any gamepad input, set active state
+      if (hasStickInput || hasButtonInput) {
+        setIsGamepadActive(true)
+      }
+
+      // Only deactivate after a longer period without input
+      if (!hasStickInput && !hasButtonInput && isGamepadActive) {
+        // Add debounce to prevent flickering
+        setTimeout(() => {
+          const recheck = world.controls.gamepadLeftStick?.value || { x: 0, z: 0 }
+          if (Math.abs(recheck.x) < 0.1 && Math.abs(recheck.z) < 0.1) {
+            setIsGamepadActive(false)
+          }
+        }, 1000)
+      }
+    }
+
+    const interval = setInterval(checkGamepad, 100)
+    return () => clearInterval(interval)
+  }, [world, isGamepadActive])
+
   useEffect(() => {
     const control = world.controls.bind({ priority: ControlPriorities.CORE_UI })
     control.enter.onPress = () => {
@@ -136,6 +239,7 @@ function Side({ world, player, toggleSettings, toggleApps }) {
     }
     return () => control.release()
   }, [chat])
+
   useEffect(() => {
     if (chat) {
       inputRef.current.focus()
@@ -143,6 +247,7 @@ function Side({ world, player, toggleSettings, toggleApps }) {
       inputRef.current.blur()
     }
   }, [chat])
+
   const send = async e => {
     if (world.controls.pointer.locked) {
       setTimeout(() => setChat(false), 10)
@@ -171,6 +276,7 @@ function Side({ world, player, toggleSettings, toggleApps }) {
     }
     world.chat.add(data, true)
   }
+
   return (
     <div
       className='side'
@@ -303,7 +409,9 @@ function Side({ world, player, toggleSettings, toggleApps }) {
               if (e.code === 'Escape') {
                 setChat(false)
               }
-              if (e.code === 'Enter') {
+              // meta quest 3 isn't spec complaint and instead has e.code = '' and e.key = 'Enter'
+              // spec says e.code should be a key code and e.key should be the text output of the key eg 'b', 'B', and '\n'
+              if (e.code === 'Enter' || e.key === 'Enter') {
                 send(e)
               }
             }}
@@ -515,61 +623,105 @@ function KickedOverlay({ code }) {
 
 function Actions({ world }) {
   const [actions, setActions] = useState(() => world.controls.actions)
+  const [inputDevice, setInputDevice] = useState('keyboard')
+  const [buildMode, setBuildMode] = useState(false)
+
   useEffect(() => {
-    world.on('actions', setActions)
-    return () => world.off('actions', setActions)
-  }, [])
+    const handleActions = newActions => setActions(newActions)
+    const handleInputDevice = device => setInputDevice(device)
+    const handleBuildMode = enabled => setBuildMode(enabled)
+
+    world.on('actions', handleActions)
+    world.on('input-device-changed', handleInputDevice)
+    world.on('build-mode', handleBuildMode)
+    
+    return () => {
+      world.off('actions', handleActions)
+      world.off('input-device-changed', handleInputDevice)
+      world.off('build-mode', handleBuildMode)
+    }
+  }, [world])
 
   return (
-    <div
-      className='actions'
-      css={css`
-        padding-left: 8px;
-        flex: 1;
+    <div className='actions' css={css`
+      padding-left: 8px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      .actions-item {
         display: flex;
-        flex-direction: column;
-        justify-content: center;
-        .actions-item {
+        align-items: center;
+        margin: 0 0 8px;
+        &-icon {
+          width: 40px;
+          height: 24px;
           display: flex;
           align-items: center;
-          margin: 0 0 8px;
-          &-icon {
-            // ...
+          justify-content: center;
+        }
+        &-label {
+          margin-left: 10px;
+          font-weight: 500;
+          text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+        }
+      }
+    `}>
+      {actions.map(action => {
+        let actionLabel = action.label
+        let actionIcon = null
+
+        if (inputDevice === 'gamepad') {
+          const mapping = buildMode ? {
+            mouseLeft: { button: 'X', label: 'Place' },
+            delete: { button: 'B', label: 'Delete' },
+            cameraControl: { button: 'R_STICK', label: 'Camera Control' },
+            rotate: { button: 'Y', label: 'Rotate' },
+            pin: { button: 'A', label: 'Pin' },
+            cycleGizmo: { button: 'L_STICK', label: 'Cycle Gizmo Mode' },
+            toggleBuildMode: { button: 'SELECT', label: 'Exit Build Mode' }
+          } : {
+            jump: { button: 'A', label: 'Jump' },
+            sprint: { button: 'L_STICK', label: 'Sprint' },
+            cameraControl: { button: 'R_STICK', label: 'Camera Control' },
+            toggleBuildMode: { button: 'SELECT', label: 'Toggle Build Mode' }
           }
-          &-label {
-            margin-left: 10px;
-            font-weight: 500;
-            text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+          const buttonMapping = mapping[action.type]
+          if (buttonMapping) {
+            actionIcon = <GamepadIcon button={buttonMapping.button} />
+            actionLabel = buttonMapping.label
+          }
+        } else {
+          if (action.type === 'mouseLeft') {
+            actionIcon = <ActionIcon icon={MouseLeftIcon} />
+          } else if (action.type === 'mouseRight') {
+            actionIcon = <ActionIcon icon={MouseRightIcon} />
+          } else if (action.type === 'mouseWheel') {
+            actionIcon = <ActionIcon icon={MouseWheelIcon} />
+          } else if (buttons.has(action.type)) {
+            actionIcon = <ActionPill label={propToLabel[action.type]} />
           }
         }
-      `}
-    >
-      {actions.map(action => (
-        <div className='actions-item' key={action.id}>
-          <div className='actions-item-icon'>{getActionIcon(action.type)}</div>
-          <div className='actions-item-label'>{action.label}</div>
-        </div>
-      ))}
+
+        if (!actionIcon) return null
+
+        return (
+          <div className='actions-item' key={action.id}>
+            <div className='actions-item-icon'>{actionIcon}</div>
+            <div className='actions-item-label'>{actionLabel}</div>
+          </div>
+        )
+      })}
     </div>
   )
 }
 
 function getActionIcon(type) {
-  if (type === 'controlLeft') {
-    return <ActionPill label='Ctrl' />
-  }
-  if (type === 'mouseLeft') {
-    return <ActionIcon icon={MouseLeftIcon} />
-  }
-  if (type === 'mouseRight') {
-    return <ActionIcon icon={MouseRightIcon} />
-  }
-  if (type === 'mouseWheel') {
-    return <ActionIcon icon={MouseWheelIcon} />
-  }
-  if (buttons.has(type)) {
-    return <ActionPill label={propToLabel[type]} />
-  }
+  if (type === 'mouseLeft') return <ActionIcon icon={MouseLeftIcon} />
+  if (type === 'mouseRight') return <ActionIcon icon={MouseRightIcon} />
+  if (type === 'mouseWheel') return <ActionIcon icon={MouseWheelIcon} />
+  if (type === 'controlLeft') return <ActionPill label='Ctrl' />
+  if (buttons.has(type)) return <ActionPill label={propToLabel[type]} />
   return <ActionPill label='?' />
 }
 
@@ -606,6 +758,24 @@ function ActionIcon({ icon: Icon }) {
     >
       <Icon />
     </div>
+  )
+}
+
+function GamepadIcon({ button }) {
+  const iconPath = XBOX_ICONS[button]
+  if (!iconPath) return null
+
+  return (
+    <img
+      src={iconPath}
+      alt={button}
+      css={css`
+        width: 24px;
+        height: 24px;
+        object-fit: contain;
+        filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
+      `}
+    />
   )
 }
 
