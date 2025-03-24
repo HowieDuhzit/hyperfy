@@ -116,11 +116,13 @@ export class Mesh extends Node {
   }
 
   applyStats(stats) {
-    if (this._geometry && !stats.geometries.has(this._geometry)) {
+    if (this._geometry && !stats.geometries.has(this._geometry.uuid)) {
+      console.log('geo', this.id, this._geometry.uuid)
       stats.geometries.add(this._geometry.uuid)
       stats.triangles += getTrianglesFromGeometry(this._geometry)
     }
-    if (this._material) {
+    if (this._material && !stats.materials.has(this._material.uuid)) {
+      stats.materials.add(this._material.uuid)
       stats.textureBytes += getTextureBytesFromMaterial(this._material)
     }
   }

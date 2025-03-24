@@ -129,6 +129,9 @@ function Side({ world, player, toggleSettings, toggleApps }) {
   }, [player])
   useEffect(() => {
     const control = world.controls.bind({ priority: ControlPriorities.CORE_UI })
+    control.slash.onPress = () => {
+      if (!chat) setChat(true)
+    }
     control.enter.onPress = () => {
       if (!chat) setChat(true)
     }
