@@ -293,6 +293,26 @@ export class App extends Entity {
     }
   }
 
+  updateConfiguration(updates) {
+    if (!this.fields) return
+    
+    // Apply updates to blueprint props
+    for (const update of updates) {
+      if (update.key && update.hasOwnProperty('value')) {
+        this.blueprint.props[update.key] = update.value
+      }
+    }
+    
+    // Notify the world that this app's configuration changed
+    this.world.apps.configureUpdate(this, updates)
+    
+    // Broadcast the change to other clients
+    this.world.network.send('appConfigUpdated', {
+      appId: this.data.id,
+      updates: updates
+    })
+  }
+
   crash() {
     this.build(true)
   }

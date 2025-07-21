@@ -163,6 +163,13 @@ export class ClientNetwork extends System {
     this.world.blueprints.modify(change)
   }
 
+  onAppConfigUpdated = data => {
+    const app = this.world.entities.get(data.appId)
+    if (app && app.isApp) {
+      this.world.apps.configureUpdate(app, data.updates)
+    }
+  }
+
   onEntityAdded = data => {
     this.world.entities.add(data)
   }

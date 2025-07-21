@@ -134,6 +134,86 @@ function MenuItemFields({ world, app, blueprint }) {
   }, [])
   const modify = (key, value) => {
     if (props[key] === value) return
+    
+    // Special handling for preset changes
+    if (key === 'preset' && value !== 'custom') {
+      // Get presets from global window object
+      const presets = window.particleFXPresets || window.dynamicConfigTestPresets || {}
+      const preset = presets[value]
+      if (preset) {
+        // Apply all preset values
+        const bp = world.blueprints.get(blueprint.id)
+        const newProps = { ...bp.props, [key]: value, ...preset }
+        const id = bp.id
+        const version = bp.version + 1
+        world.blueprints.modify({ id, version, props: newProps })
+        world.network.send('blueprintModified', { id, version, props: newProps })
+        return
+      }
+    }
+    
+    // Special handling for saving presets
+    if (key === 'savePreset' && value && value.trim()) {
+      // Log current settings as a preset
+      const currentPreset = {}
+      
+      // Determine which config keys to use based on available presets
+      let configKeys = []
+      if (window.particleFXPresets) {
+        // ParticleFX script keys
+        configKeys = [
+          'rate', 'max', 'life', 'shapeType', 'shapeWidth', 'shapeHeight', 'shapeDepth',
+          'volumeEmission', 'direction', 'speed', 'gravity', 'size', 'sizeOverLife',
+          'rotate', 'color', 'alpha', 'alphaOverLife', 'blending', 'emissive', 'lit',
+          'duration', 'loop', 'autoPlay', 'space', 'image'
+        ]
+      } else if (window.dynamicConfigTestPresets) {
+        // DynamicConfigTest script keys
+        configKeys = ['color', 'endColor', 'intensity', 'showDemo']
+      } else {
+        // Generic approach - save all non-preset fields
+        configKeys = Object.keys(props).filter(k => k !== 'preset' && k !== 'savePreset')
+      }
+      
+      configKeys.forEach(configKey => {
+        if (props[configKey] !== undefined) {
+          currentPreset[configKey] = props[configKey]
+        }
+      })
+      
+      console.log(`\n=== PRESET: "${value}" ===`)
+      console.log(JSON.stringify(currentPreset, null, 2))
+      console.log(`\nCopy this object and add it to the presets in your script.`)
+      console.log(`Don't forget to add "${value}" to the preset options array!`)
+      
+      // Clear the input after saving
+      const bp = world.blueprints.get(blueprint.id)
+      const newProps = { ...bp.props, [key]: '' }
+      const id = bp.id
+      const version = bp.version + 1
+      world.blueprints.modify({ id, version, props: newProps })
+      world.network.send('blueprintModified', { id, version, props: newProps })
+      return
+    }
+    
+    // Check if this is a reactive field change that should trigger dynamic updates
+    const field = app.fields?.find(f => f.key === key)
+    if (field && field.reactive && field._onChangeHandler) {
+      try {
+        // Call the reactive onChange handler
+        const updates = field._onChangeHandler(value, app, props)
+        if (updates && Array.isArray(updates)) {
+          // Use the new dynamic update method for multiple field changes
+          app.updateConfiguration(updates)
+          return
+        }
+      } catch (error) {
+        console.warn('Reactive onChange handler failed:', error)
+        // Fall back to default behavior
+      }
+    }
+    
+    // Default behavior for single field updates
     const bp = world.blueprints.get(blueprint.id)
     const newProps = { ...bp.props, [key]: value }
     // update blueprint locally (also rebuilds apps)

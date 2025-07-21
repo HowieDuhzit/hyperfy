@@ -331,6 +331,15 @@ export class Apps extends System {
         if (!isArray(entity.fields)) {
           entity.fields = []
         }
+        
+        // Enhanced: Support for reactive fields
+        for (const field of entity.fields) {
+          if (field.reactive && field.onChange) {
+            // Store the onChange handler for later use
+            field._onChangeHandler = field.onChange
+          }
+        }
+        
         // apply any initial values
         const props = entity.blueprint.props
         for (const field of entity.fields) {
@@ -339,6 +348,9 @@ export class Apps extends System {
           }
         }
         entity.onFields?.(entity.fields)
+      },
+      configureUpdate(entity, updates) {
+        return this.configureUpdate(entity, updates)
       },
     }
   }
@@ -376,5 +388,31 @@ export class Apps extends System {
         }
       }
     }
+  }
+
+  configureUpdate(entity, updates) {
+    if (!entity.fields) return
+    
+    // Update the blueprint props first
+    for (const update of updates) {
+      if (update.key && update.hasOwnProperty('value')) {
+        entity.blueprint.props[update.key] = update.value
+      }
+    }
+    
+    // Update the fields array with new values for UI display
+    for (const update of updates) {
+      const field = entity.fields.find(f => f.key === update.key)
+      if (field && update.hasOwnProperty('value')) {
+        // Update the field's current value (for UI display)
+        field.currentValue = update.value
+      }
+    }
+    
+    // Notify UI components that fields have changed
+    entity.onFields?.(entity.fields)
+    
+    // Trigger a rebuild of this specific app (not all apps)
+    entity.build()
   }
 }

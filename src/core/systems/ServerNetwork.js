@@ -432,6 +432,18 @@ export class ServerNetwork extends System {
     }
   }
 
+  onAppConfigUpdated = (socket, data) => {
+    if (!this.isBuilder(socket.player)) {
+      return console.error('player attempted to update app config without builder permission')
+    }
+    
+    const app = this.world.entities.get(data.appId)
+    if (app && app.isApp) {
+      this.world.apps.configureUpdate(app, data.updates)
+      this.send('appConfigUpdated', data, socket.id)
+    }
+  }
+
   onEntityAdded = (socket, data) => {
     if (!this.isBuilder(socket.player)) {
       return console.error('player attempted to add entity without builder permission')
