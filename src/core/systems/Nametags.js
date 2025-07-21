@@ -59,16 +59,41 @@ export class Nametags extends System {
       uXR: { value: 0 },
       uOrientation: { value: this.world.rig.quaternion },
     }
-    this.material = new CustomShaderMaterial({
-      baseMaterial: THREE.MeshBasicMaterial,
-      // all nametags are drawn on top of everything
-      // this isn't perfect but we should be improve.
-      // also note mesh.renderOrder=9999
-      transparent: true,
-      depthWrite: false,
-      depthTest: false,
-      uniforms: this.uniforms,
-      vertexShader: `
+    // WebGPU compatibility: Check if WebGPU renderer is being used
+    const renderer = this.world.graphics?.renderer
+    this.isWebGPU = renderer && (renderer.isWebGPURenderer || renderer.constructor.name === 'WebGPURenderer')
+    
+    console.log('🔍 Nametags WebGPU detection:', {
+      hasRenderer: !!renderer,
+      rendererType: renderer?.constructor?.name,
+      isWebGPURenderer: renderer?.isWebGPURenderer,
+      detectedAsWebGPU: this.isWebGPU
+    })
+    
+    // Track if we've completed WebGPU detection (in case renderer isn't ready yet)
+    this.webGPUCheckComplete = !!renderer
+    
+    if (this.isWebGPU) {
+      // Use basic material for WebGPU compatibility
+      console.log('Using basic material for nametags (WebGPU compatibility)')
+      this.material = new THREE.MeshBasicMaterial({
+        map: this.texture,
+        transparent: true,
+        depthWrite: false,
+        depthTest: false
+      })
+    } else {
+      // Use CustomShaderMaterial for WebGL
+      this.material = new CustomShaderMaterial({
+        baseMaterial: THREE.MeshBasicMaterial,
+        // all nametags are drawn on top of everything
+        // this isn't perfect but we should be improve.
+        // also note mesh.renderOrder=9999
+        transparent: true,
+        depthWrite: false,
+        depthTest: false,
+        uniforms: this.uniforms,
+        vertexShader: `
         attribute vec2 coords;
         uniform float uXR;
         uniform vec4 uOrientation;
@@ -177,6 +202,7 @@ export class Nametags extends System {
         }
       `,
     })
+    }
     this.geometry = new THREE.PlaneGeometry(1, NAMETAG_HEIGHT / NAMETAG_WIDTH)
     this.geometry.setAttribute('coords', new THREE.InstancedBufferAttribute(new Float32Array(MAX_INSTANCES * 2), 2)) // xy coordinates in atlas
     this.mesh = new THREE.InstancedMesh(this.geometry, this.material, MAX_INSTANCES)
@@ -185,6 +211,15 @@ export class Nametags extends System {
     this.mesh.matrixWorldAutoUpdate = false
     this.mesh.frustumCulled = false
     this.mesh.count = 0
+    
+    // WebGPU compatibility: Set up billboard behavior differently
+    if (this.isWebGPU) {
+      // For WebGPU, we need to handle billboarding manually in the update loop
+      this.needsBillboardUpdate = true
+    }
+    
+    // Log WebGPU compatibility status
+    console.log(`✅ Nametags system initialized with ${this.isWebGPU ? 'WebGPU-compatible basic material' : 'CustomShaderMaterial'}`)
   }
 
   start() {
@@ -362,7 +397,73 @@ export class Nametags extends System {
     this.texture.needsUpdate = true
   }
 
+  update(delta) {
+    // Re-check WebGPU status if renderer wasn't available during init
+    if (!this.webGPUCheckComplete) {
+      const renderer = this.world.graphics?.renderer
+      if (renderer) {
+        const wasWebGPU = this.isWebGPU
+        this.isWebGPU = renderer.isWebGPURenderer || renderer.constructor.name === 'WebGPURenderer'
+        this.webGPUCheckComplete = true
+        
+        if (wasWebGPU !== this.isWebGPU) {
+          console.log(`🔄 Nametags WebGPU status updated: ${wasWebGPU} → ${this.isWebGPU}`)
+          // If status changed and we need WebGPU compatibility, recreate material
+          if (this.isWebGPU && !wasWebGPU) {
+            console.log('🔄 Switching nametags to WebGPU-compatible material')
+            this.material.dispose()
+            this.material = new THREE.MeshBasicMaterial({
+              map: this.texture,
+              transparent: true,
+              depthWrite: false,
+              depthTest: false
+            })
+            this.mesh.material = this.material
+            this.needsBillboardUpdate = true
+          }
+        }
+      }
+    }
+    
+    // WebGPU compatibility: Handle billboard rotation manually
+    if (this.needsBillboardUpdate && this.world.camera) {
+      // Make all nametags face the camera
+      const camera = this.world.camera
+      for (let i = 0; i < this.mesh.count; i++) {
+        // Get the instance matrix
+        const matrix = new THREE.Matrix4()
+        this.mesh.getMatrixAt(i, matrix)
+        
+        // Extract position
+        const position = new THREE.Vector3()
+        position.setFromMatrixPosition(matrix)
+        
+        // Create billboard rotation
+        const direction = new THREE.Vector3()
+        direction.subVectors(camera.position, position).normalize()
+        
+        // Create rotation matrix that faces the camera
+        const up = new THREE.Vector3(0, 1, 0)
+        const right = new THREE.Vector3()
+        right.crossVectors(up, direction).normalize()
+        const actualUp = new THREE.Vector3()
+        actualUp.crossVectors(direction, right).normalize()
+        
+        // Create new transform matrix
+        const billboardMatrix = new THREE.Matrix4()
+        billboardMatrix.makeBasis(right, actualUp, direction.negate())
+        billboardMatrix.setPosition(position)
+        
+        // Update instance matrix
+        this.mesh.setMatrixAt(i, billboardMatrix)
+      }
+      this.mesh.instanceMatrix.needsUpdate = true
+    }
+  }
+
   onXRSession = session => {
-    this.uniforms.uXR.value = session ? 1 : 0
+    if (!this.isWebGPU && this.uniforms) {
+      this.uniforms.uXR.value = session ? 1 : 0
+    }
   }
 }

@@ -48,17 +48,7 @@ export class ClientAudio extends System {
   }
 
   setupUnlockListener() {
-    const complete = () => {
-      this.unlocked = true
-      document.removeEventListener('click', unlock)
-      document.removeEventListener('touchstart', unlock)
-      document.removeEventListener('keydown', unlock)
-      while (this.queue.length) {
-        this.queue.pop()()
-      }
-      console.log('[audio] unlocked')
-    }
-    const unlock = async () => {
+    const unlock = async (e) => {
       try {
         await this.ctx.resume()
         if (this.ctx.state !== 'running') throw new Error('Audio still suspended')
@@ -83,9 +73,29 @@ export class ClientAudio extends System {
         complete()
       }
     }
+    
+    // Use a specific keydown handler that excludes ESC to avoid interfering with menu
+    const keyUnlock = (e) => {
+      if (e.code !== 'Escape') {
+        console.log('[audio] Non-ESC key pressed, unlocking audio')
+        unlock(e)
+      }
+    }
+    
+    const complete = () => {
+      this.unlocked = true
+      document.removeEventListener('click', unlock)
+      document.removeEventListener('touchstart', unlock)
+      document.removeEventListener('keydown', keyUnlock)
+      while (this.queue.length) {
+        this.queue.pop()()
+      }
+      console.log('[audio] unlocked')
+    }
+    
     document.addEventListener('click', unlock)
     document.addEventListener('touchstart', unlock)
-    document.addEventListener('keydown', unlock)
+    document.addEventListener('keydown', keyUnlock)
     console.log('[audio] suspended, waiting for interact...')
   }
 

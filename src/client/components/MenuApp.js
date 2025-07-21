@@ -215,7 +215,15 @@ function MenuItemFields({ world, app, blueprint }) {
     
     // Default behavior for single field updates
     const bp = world.blueprints.get(blueprint.id)
-    const newProps = { ...bp.props, [key]: value }
+    let newProps = { ...bp.props, [key]: value }
+    
+    // Auto-switch to "Custom" when modifying a preset
+    if (key !== 'preset' && key !== 'savePreset' && newProps.preset && newProps.preset !== 'custom') {
+      // User is modifying a setting while a preset is selected - switch to custom
+      newProps.preset = 'custom'
+      console.log(`Switched to custom preset after modifying "${key}"`)
+    }
+    
     // update blueprint locally (also rebuilds apps)
     const id = bp.id
     const version = bp.version + 1

@@ -32,6 +32,20 @@ export class Stage extends System {
     this.maskNone = new THREE.Layers()
     this.maskNone.enableAll()
     this.dirtyNodes = new Set()
+    
+    // Frustum culling support
+    this.frustum = new THREE.Frustum()
+    this.cameraMatrix = new THREE.Matrix4()
+    this.visibleObjects = []
+    this.frustumCullingEnabled = true
+    
+    // Performance tracking
+    this.stats = {
+      totalObjects: 0,
+      visibleObjects: 0,
+      culledObjects: 0,
+      lastCullTime: 0
+    }
   }
 
   init({ viewport }) {
@@ -40,7 +54,41 @@ export class Stage extends System {
   }
 
   update(delta) {
+    // Perform frustum culling if enabled
+    if (this.frustumCullingEnabled) {
+      this.performFrustumCulling()
+    }
+    
     this.models.forEach(model => model.clean())
+  }
+  
+  performFrustumCulling() {
+    const startTime = performance.now()
+    
+    // Update frustum from camera
+    this.cameraMatrix.multiplyMatrices(
+      this.world.camera.projectionMatrix, 
+      this.world.camera.matrixWorldInverse
+    )
+    this.frustum.setFromProjectionMatrix(this.cameraMatrix)
+    
+    // Reset stats
+    this.stats.totalObjects = 0
+    this.stats.visibleObjects = 0
+    this.stats.culledObjects = 0
+    
+    // Use octree for coarse culling, then frustum for fine culling
+    this.visibleObjects.length = 0
+    this.octree.frustumCull(this.frustum, this.visibleObjects)
+    
+    // Update models based on culling results
+    this.models.forEach(model => {
+      model.updateVisibility(this.visibleObjects)
+    })
+    
+    // Update performance stats
+    this.stats.visibleObjects = this.visibleObjects.length
+    this.stats.lastCullTime = performance.now() - startTime
   }
 
   postUpdate() {
@@ -74,12 +122,55 @@ export class Stage extends System {
   }
 
   insertLinked({ geometry, material, castShadow, receiveShadow, node, matrix }) {
-    const id = `${geometry.uuid}/${material.uuid}/${castShadow}/${receiveShadow}`
+    // Enhanced batching: Use geometry and material hashes for better merging
+    const geometryHash = this.getGeometryHash(geometry)
+    const materialHash = this.getMaterialHash(material)
+    const id = `${geometryHash}/${materialHash}/${castShadow}/${receiveShadow}`
+    
     if (!this.models.has(id)) {
       const model = new Model(this, geometry, material, castShadow, receiveShadow)
       this.models.set(id, model)
     }
     return this.models.get(id).create(node, matrix)
+  }
+
+  getGeometryHash(geometry) {
+    // Create a more stable hash based on geometry properties rather than UUID
+    if (geometry._hyperfyHash) return geometry._hyperfyHash
+    
+    const attributes = geometry.attributes
+    let hash = ''
+    
+    // Hash vertex count and key attributes
+    if (attributes.position) hash += `pos:${attributes.position.count}`
+    if (attributes.normal) hash += `norm:${attributes.normal.count}`
+    if (attributes.uv) hash += `uv:${attributes.uv.count}`
+    if (geometry.index) hash += `idx:${geometry.index.count}`
+    
+    // Include geometry type information
+    hash += `type:${geometry.type || 'BufferGeometry'}`
+    
+    geometry._hyperfyHash = hash
+    return hash
+  }
+
+  getMaterialHash(material) {
+    // Create a hash based on material properties for better batching
+    if (material._hyperfyHash) return material._hyperfyHash
+    
+    let hash = material.type || 'Material'
+    
+    // Include key material properties that affect rendering
+    if (material.color) hash += `col:${material.color.getHex()}`
+    if (material.map) hash += `map:${material.map.uuid}`
+    if (material.normalMap) hash += `norm:${material.normalMap.uuid}`
+    if (material.roughness !== undefined) hash += `rough:${material.roughness}`
+    if (material.metalness !== undefined) hash += `metal:${material.metalness}`
+    if (material.transparent !== undefined) hash += `trans:${material.transparent}`
+    if (material.alphaTest !== undefined) hash += `alpha:${material.alphaTest}`
+    
+    material._hyperfyHash = hash
+    return hash
   }
 
   insertSingle({ geometry, material, castShadow, receiveShadow, node, matrix }) {
@@ -249,6 +340,40 @@ export class Stage extends System {
   destroy() {
     this.models.clear()
   }
+
+  // Performance monitoring and debugging utilities
+  getPerformanceStats() {
+    const totalModels = this.models.size
+    const totalInstances = Array.from(this.models.values()).reduce((sum, model) => sum + model.items.length, 0)
+    
+    return {
+      ...this.stats,
+      totalModels,
+      totalInstances,
+      averageInstancesPerModel: totalInstances / Math.max(totalModels, 1),
+      cullRatio: this.stats.totalObjects > 0 ? this.stats.culledObjects / this.stats.totalObjects : 0
+    }
+  }
+
+  logPerformanceStats() {
+    const stats = this.getPerformanceStats()
+    console.group('Hyperfy Stage Performance Stats')
+    console.log(`Total Models: ${stats.totalModels}`)
+    console.log(`Total Instances: ${stats.totalInstances}`)
+    console.log(`Average Instances per Model: ${stats.averageInstancesPerModel.toFixed(2)}`)
+    console.log(`Total Objects: ${stats.totalObjects}`)
+    console.log(`Visible Objects: ${stats.visibleObjects}`)
+    console.log(`Culled Objects: ${stats.culledObjects}`)
+    console.log(`Cull Ratio: ${(stats.cullRatio * 100).toFixed(1)}%`)
+    console.log(`Last Cull Time: ${stats.lastCullTime.toFixed(2)}ms`)
+    console.log(`Frustum Culling: ${this.frustumCullingEnabled ? 'Enabled' : 'Disabled'}`)
+    console.groupEnd()
+  }
+
+  enableFrustumCulling(enabled = true) {
+    this.frustumCullingEnabled = enabled
+    console.log(`Frustum culling ${enabled ? 'enabled' : 'disabled'}`)
+  }
 }
 
 class Model {
@@ -279,10 +404,17 @@ class Model {
     this.iMesh.receiveShadow = this.receiveShadow
     this.iMesh.matrixAutoUpdate = false
     this.iMesh.matrixWorldAutoUpdate = false
-    this.iMesh.frustumCulled = false
+    this.iMesh.frustumCulled = false // Disable Three.js frustum culling - we handle it manually
     this.iMesh.getEntity = this.getEntity.bind(this)
     this.items = [] // { matrix, node }
     this.dirty = true
+    
+    // Performance tracking per model
+    this.stats = {
+      totalInstances: 0,
+      visibleInstances: 0,
+      lastUpdateTime: 0
+    }
   }
 
   create(node, matrix) {
@@ -367,6 +499,55 @@ class Model {
     this.iMesh.instanceMatrix.needsUpdate = true
     // this.iMesh.computeBoundingSphere()
     this.dirty = false
+  }
+
+  updateVisibility(visibleItems) {
+    if (!this.stage.frustumCullingEnabled) return
+    
+    const startTime = performance.now()
+    
+    // Create a set of visible item nodes for fast lookup
+    const visibleNodes = new Set()
+    for (const item of visibleItems) {
+      if (item.geometry === this.geometry && item.material === this.material.raw) {
+        visibleNodes.add(item.node)
+      }
+    }
+    
+    // Update instance visibility - pack visible instances to the front
+    let visibleCount = 0
+    let needsUpdate = false
+    
+    for (let i = 0; i < this.items.length; i++) {
+      const item = this.items[i]
+      const isVisible = visibleNodes.has(item.node)
+      
+      if (isVisible) {
+        // Move visible instances to the front of the buffer
+        if (visibleCount !== i) {
+          this.iMesh.setMatrixAt(visibleCount, item.matrix)
+          needsUpdate = true
+        }
+        visibleCount++
+      }
+    }
+    
+    // Only render visible instances
+    const prevCount = this.iMesh.count
+    this.iMesh.count = visibleCount
+    
+    // Update stats
+    this.stats.totalInstances = this.items.length
+    this.stats.visibleInstances = visibleCount
+    this.stats.lastUpdateTime = performance.now() - startTime
+    
+    this.stage.stats.totalObjects += this.items.length
+    this.stage.stats.culledObjects += (this.items.length - visibleCount)
+    
+    // Only update matrix buffer if needed
+    if (needsUpdate || prevCount !== visibleCount) {
+      this.iMesh.instanceMatrix.needsUpdate = true
+    }
   }
 
   getEntity(instanceId) {

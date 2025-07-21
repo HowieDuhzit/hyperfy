@@ -483,10 +483,24 @@ export class ClientBuilder extends System {
     if (!this.canBuild()) return
     enabled = isBoolean(enabled) ? enabled : !this.enabled
     if (this.enabled === enabled) return
+    console.log('[Builder] Toggling build mode from', this.enabled, 'to', enabled)
     this.enabled = enabled
-    if (!this.enabled) this.select(null)
+    if (!this.enabled) {
+      console.log('[Builder] Disabling build mode - clearing selection:', this.selected?.data?.id)
+      this.select(null)
+      // Also close any open app UI
+      this.world.ui.setApp(null)
+      // Reattach cursor for play mode
+      this.control.pointer.lock()
+    }
     this.updateActions()
     this.world.emit('build-mode', enabled)
+    
+    // Emit for UI system to listen to
+    if (this.emit) {
+      console.log('[Builder] Emitting toggle event:', enabled)
+      this.emit('toggle', enabled)
+    }
   }
 
   setMode(mode) {

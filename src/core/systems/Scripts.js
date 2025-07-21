@@ -39,7 +39,7 @@ export class Scripts extends System {
       eval: undefined,
       harden: undefined,
       lockdown: undefined,
-      window: globalThis,
+      window: typeof window !== 'undefined' ? window : globalThis,
       num,
       prng,
       clamp,

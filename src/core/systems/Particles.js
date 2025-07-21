@@ -16,6 +16,60 @@ const billboardModeInts = {
   direction: 2,
 }
 
+function getThreeBlending(blendingMode) {
+  switch (blendingMode) {
+    case 'additive':
+      return THREE.AdditiveBlending
+    case 'multiply':
+      return THREE.MultiplyBlending
+    case 'screen':
+      // Implement screen blending using CustomBlending
+      return {
+        blending: THREE.CustomBlending,
+        blendEquation: THREE.AddEquation,
+        blendSrc: THREE.OneFactor,
+        blendDst: THREE.OneMinusSrcColorFactor
+      }
+    case 'subtract':
+      return THREE.SubtractiveBlending
+    case 'divide':
+      // Implement divide blending using CustomBlending
+      return {
+        blending: THREE.CustomBlending,
+        blendEquation: THREE.AddEquation,
+        blendSrc: THREE.ZeroFactor,
+        blendDst: THREE.OneMinusSrcColorFactor
+      }
+    case 'lighten':
+      // Implement lighten (max) blending
+      return {
+        blending: THREE.CustomBlending,
+        blendEquation: THREE.MaxEquation || THREE.AddEquation,
+        blendSrc: THREE.OneFactor,
+        blendDst: THREE.OneFactor
+      }
+    case 'darken':
+      // Implement darken (min) blending  
+      return {
+        blending: THREE.CustomBlending,
+        blendEquation: THREE.MinEquation || THREE.AddEquation,
+        blendSrc: THREE.OneFactor,
+        blendDst: THREE.OneFactor
+      }
+    case 'overlay':
+      // Implement overlay blending (complex, fallback to screen for now)
+      return {
+        blending: THREE.CustomBlending,
+        blendEquation: THREE.AddEquation,
+        blendSrc: THREE.SrcAlphaFactor,
+        blendDst: THREE.OneMinusSrcAlphaFactor
+      }
+    case 'normal':
+    default:
+      return THREE.NormalBlending
+  }
+}
+
 let worker = null
 function getWorker() {
   if (!worker) {
@@ -139,19 +193,56 @@ function createEmitter(world, system, node) {
     // texture.needsUpdate = true
   })
 
-  const material = new CustomShaderMaterial({
-    baseMaterial: node._lit ? THREE.MeshStandardMaterial : THREE.MeshBasicMaterial,
-    ...(node._lit ? { roughness: 1, metalness: 0 } : {}),
-    blending: node._blending === 'additive' ? THREE.AdditiveBlending : THREE.NormalBlending,
-    transparent: true,
-    premultipliedAlpha: true,
-    color: 'white',
-    side: THREE.DoubleSide,
-    // side: THREE.FrontSide,
-    depthWrite: false,
-    depthTest: true,
-    uniforms,
-    vertexShader: `
+  // WebGPU compatibility: Check if WebGPU renderer is being used
+  const renderer = world.graphics?.renderer
+  const isWebGPU = renderer && (renderer.isWebGPURenderer || renderer.constructor.name === 'WebGPURenderer')
+  
+  let material
+  
+  if (isWebGPU) {
+    // Use basic material for WebGPU compatibility
+    console.log('Using basic material for Particles system (WebGPU compatibility)')
+    material = node._lit ? new THREE.MeshStandardMaterial() : new THREE.MeshBasicMaterial()
+    
+    if (node._lit) {
+      material.roughness = 1
+      material.metalness = 0
+    }
+    
+    // Apply blending settings
+    const blending = getThreeBlending(node._blending)
+    if (typeof blending === 'object') {
+      Object.assign(material, blending)
+    } else {
+      material.blending = blending
+    }
+    
+    material.transparent = true
+    material.premultipliedAlpha = true
+    material.color.set('white')
+    material.side = THREE.DoubleSide
+    material.depthWrite = false
+    material.depthTest = true
+    
+    // Apply basic texture if available
+    if (uniforms.uMap.value) {
+      material.map = uniforms.uMap.value
+    }
+  } else {
+    // Use CustomShaderMaterial for WebGL
+    material = new CustomShaderMaterial({
+      baseMaterial: node._lit ? THREE.MeshStandardMaterial : THREE.MeshBasicMaterial,
+      ...(node._lit ? { roughness: 1, metalness: 0 } : {}),
+      ...(typeof getThreeBlending(node._blending) === 'object' ? getThreeBlending(node._blending) : { blending: getThreeBlending(node._blending) }),
+      transparent: true,
+      premultipliedAlpha: true,
+      color: 'white',
+      side: THREE.DoubleSide,
+      // side: THREE.FrontSide,
+      depthWrite: false,
+      depthTest: true,
+      uniforms,
+      vertexShader: `
       attribute vec3 aPosition;
       attribute float aRotation;
       attribute vec3 aDirection;
@@ -253,7 +344,9 @@ function createEmitter(world, system, node) {
         csm_DiffuseColor = baseColor;
       }
     `,
-  })
+    })
+  }
+  
   const mesh = new THREE.InstancedMesh(geometry, material, node._max)
   mesh._node = node
   mesh.count = 0

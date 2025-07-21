@@ -106,6 +106,11 @@ export class LooseOctree {
     return intersects
   }
 
+  frustumCull(frustum, visibleItems = []) {
+    this.root.frustumCull(frustum, visibleItems)
+    return visibleItems
+  }
+
   // spherecast(sphere, intersects = []) {
   //   // console.time('spherecast')
   //   this.root.spherecast(sphere, intersects)
@@ -277,6 +282,60 @@ class LooseOctreeNode {
       child.raycast(raycaster, intersects)
     }
     return intersects
+  }
+
+  frustumCull(frustum, visibleItems) {
+    // Early exit if this node is completely outside the frustum
+    if (!frustum.intersectsBox(this.outer)) {
+      return visibleItems
+    }
+    
+    // If this node is completely inside the frustum, add all items
+    if (frustum.containsPoint(this.center)) {
+      // Check if the entire node bounds are inside frustum
+      const corners = [
+        new THREE.Vector3(this.outer.min.x, this.outer.min.y, this.outer.min.z),
+        new THREE.Vector3(this.outer.min.x, this.outer.min.y, this.outer.max.z),
+        new THREE.Vector3(this.outer.min.x, this.outer.max.y, this.outer.min.z),
+        new THREE.Vector3(this.outer.min.x, this.outer.max.y, this.outer.max.z),
+        new THREE.Vector3(this.outer.max.x, this.outer.min.y, this.outer.min.z),
+        new THREE.Vector3(this.outer.max.x, this.outer.min.y, this.outer.max.z),
+        new THREE.Vector3(this.outer.max.x, this.outer.max.y, this.outer.min.z),
+        new THREE.Vector3(this.outer.max.x, this.outer.max.y, this.outer.max.z)
+      ]
+      
+      const allCornersInside = corners.every(corner => frustum.containsPoint(corner))
+      
+      if (allCornersInside) {
+        // Add all items in this node and children without further testing
+        this.addAllItems(visibleItems)
+        return visibleItems
+      }
+    }
+    
+    // Test individual items against frustum
+    for (const item of this.items) {
+      if (frustum.intersectsSphere(item.sphere)) {
+        visibleItems.push(item)
+      }
+    }
+    
+    // Recursively test children
+    for (const child of this.children) {
+      child.frustumCull(frustum, visibleItems)
+    }
+    
+    return visibleItems
+  }
+  
+  addAllItems(visibleItems) {
+    // Add all items from this node
+    visibleItems.push(...this.items)
+    
+    // Recursively add all items from children
+    for (const child of this.children) {
+      child.addAllItems(visibleItems)
+    }
   }
 
   // spherecast(sphere, intersects) {

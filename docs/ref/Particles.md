@@ -166,7 +166,19 @@ particles.spritesheet = [
 
 ### `.blending`: String
 
-Whether the particles uses `normal` or `additive` blending. Additive blending is more performant as it can skip sorting particles by distance each frame.
+The blending mode used for rendering particles. Available options:
+
+- **`normal`**: Standard alpha blending (default)
+- **`additive`**: Adds particle colors to background (good for fire, glow effects)
+- **`multiply`**: Multiplies particle colors with background (good for shadows, smoke)
+- **`subtract`**: Subtracts particle colors from background (good for dark effects)
+- **`screen`**: Screen blending - brightens background, similar to projecting light (good for bright magical effects)
+- **`divide`**: Divides background by particle colors (experimental artistic effect)
+- **`lighten`**: Takes the maximum of source and destination colors (brightening effect)
+- **`darken`**: Takes the minimum of source and destination colors (darkening effect)  
+- **`overlay`**: Combines multiply and screen for high contrast effects
+
+**Performance Note**: `additive` blending is most performant as it can skip sorting particles by distance each frame. Custom blending modes (`screen`, `divide`, `lighten`, `darken`, `overlay`) may require additional GPU processing but provide more artistic control.
 
 Defaults to `normal`.
 

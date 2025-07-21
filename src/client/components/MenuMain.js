@@ -1,40 +1,77 @@
+import { css } from '@firebolt-dev/css'
 import { useEffect, useMemo, useState } from 'react'
 import {
-  Menu,
-  MenuItemBack,
-  MenuItemBtn,
-  MenuItemFile,
-  MenuItemNumber,
-  MenuItemRange,
-  MenuItemSwitch,
-  MenuItemText,
-  MenuItemTextarea,
-  MenuItemToggle,
-} from './Menu'
+  ChevronLeftIcon,
+  MonitorIcon,
+  SunIcon,
+  VolumeXIcon,
+  CpuIcon,
+  EyeIcon,
+  ZapIcon,
+  PaletteIcon,
+  TrendingUpIcon,
+  SettingsIcon,
+  UserIcon,
+  MenuIcon,
+  LayoutGridIcon
+} from 'lucide-react'
+import { MenuItemBack, MenuItemBtn, MenuItemSwitch, MenuItemToggle, MenuItemText, MenuItemRange, Menu } from './Menu'
 import { usePermissions } from './usePermissions'
-import { useFullscreen } from './useFullscreen'
 
-export function MenuMain({ world }) {
-  const [pages, setPages] = useState(() => ['index'])
-  const pop = () => {
-    const next = pages.slice()
-    next.pop()
-    setPages(next)
-  }
-  const push = page => {
-    const next = pages.slice()
-    next.push(page)
-    setPages(next)
-  }
-  const page = pages[pages.length - 1]
-  let Page
-  if (page === 'index') Page = MenuMainIndex
-  if (page === 'ui') Page = MenuMainUI
-  if (page === 'graphics') Page = MenuMainGraphics
-  if (page === 'audio') Page = MenuMainAudio
-  if (page === 'world') Page = MenuMainWorld
-  return <Page world={world} pop={pop} push={push} />
-}
+// Enhanced option definitions for AAA graphics settings
+const shadowOptions = [
+  { label: 'Off', value: 'none' },
+  { label: 'Low', value: 'low' },
+  { label: 'Medium', value: 'med' },
+  { label: 'High', value: 'high' },
+]
+
+const rendererOptions = [
+  { label: 'Auto', value: 'auto' },
+  { label: 'WebGPU', value: 'webgpu' },
+  { label: 'WebGL', value: 'webgl' },
+]
+
+const antialiasingOptions = [
+  { label: 'Off', value: 'none' },
+  { label: 'FXAA', value: 'fxaa' },
+  { label: 'SMAA', value: 'smaa' },
+  { label: 'TAA', value: 'taa' },
+  { label: 'MSAA 2x', value: 'msaa2x' },
+  { label: 'MSAA 4x', value: 'msaa4x' },
+  { label: 'MSAA 8x', value: 'msaa8x' },
+]
+
+const textureQualityOptions = [
+  { label: 'Low', value: 'low' },
+  { label: 'Medium', value: 'medium' },
+  { label: 'High', value: 'high' },
+  { label: 'Ultra', value: 'ultra' },
+]
+
+const anisotropicOptions = [
+  { label: '1x', value: 1 },
+  { label: '2x', value: 2 },
+  { label: '4x', value: 4 },
+  { label: '8x', value: 8 },
+  { label: '16x', value: 16 },
+]
+
+const frameRateLimitOptions = [
+  { label: '30 FPS', value: '30' },
+  { label: '60 FPS', value: '60' },
+  { label: '120 FPS', value: '120' },
+  { label: '144 FPS', value: '144' },
+  { label: 'Unlimited', value: 'unlimited' },
+]
+
+const toneMappingOptions = [
+  { label: 'None', value: 'none' },
+  { label: 'Linear', value: 'linear' },
+  { label: 'Reinhard', value: 'reinhard' },
+  { label: 'Cineon', value: 'cineon' },
+  { label: 'ACES Filmic', value: 'aces' },
+]
 
 function MenuMainIndex({ world, pop, push }) {
   const { isAdmin, isBuilder } = usePermissions(world)
@@ -49,81 +86,22 @@ function MenuMainIndex({ world, pop, push }) {
     <Menu title='Menu'>
       <MenuItemText label='Name' hint='Change your display name' value={name} onChange={changeName} />
       <MenuItemBtn label='UI' hint='Change your interface settings' onClick={() => push('ui')} nav />
-      <MenuItemBtn label='Graphics' hint='Change your device graphics settings' onClick={() => push('graphics')} nav />
-      <MenuItemBtn label='Audio' hint='Change your audio volume' onClick={() => push('audio')} nav />
-      {isBuilder && <MenuItemBtn label='World' hint='Modify world settings' onClick={() => push('world')} nav />}
-      {isBuilder && (
-        <MenuItemBtn label='Apps' hint='View all apps in the world' onClick={() => world.ui.toggleApps()} />
-      )}
+      <MenuItemBtn label='Display' hint='Screen and visual settings' onClick={() => push('display')} nav />
+      <MenuItemBtn label='Graphics' hint='Rendering and quality settings' onClick={() => push('graphics')} nav />
+      <MenuItemBtn label='Effects' hint='Post-processing effects' onClick={() => push('effects')} nav />
+      <MenuItemBtn label='Performance' hint='Optimization settings' onClick={() => push('performance')} nav />
+      <MenuItemBtn label='Audio' hint='Volume and sound settings' onClick={() => push('audio')} nav />
     </Menu>
   )
 }
 
-function MenuMainUI({ world, pop, push }) {
-  const player = world.entities.player
-  const [canFullscreen, isFullscreen, toggleFullscreen] = useFullscreen()
-  const [ui, setUI] = useState(world.prefs.ui)
-  const [actions, setActions] = useState(world.prefs.actions)
-  const [stats, setStats] = useState(world.prefs.stats)
-  const { isBuilder } = usePermissions(world)
-  useEffect(() => {
-    const onChange = changes => {
-      if (changes.ui) setUI(changes.ui.value)
-      if (changes.actions) setActions(changes.actions.value)
-      if (changes.stats) setStats(changes.stats.value)
-    }
-    world.prefs.on('change', onChange)
-    return () => {
-      world.prefs.off('change', onChange)
-    }
-  }, [])
-  return (
-    <Menu title='Menu'>
-      <MenuItemBack hint='Go back to the main menu' onClick={pop} />
-      <MenuItemToggle
-        label='Fullscreen'
-        hint='Toggle fullscreen. Not supported in some browsers'
-        value={isFullscreen}
-        onChange={value => toggleFullscreen(value)}
-      />
-      <MenuItemRange
-        label='UI Scale'
-        hint='Change the scale of the user interface'
-        min={0.5}
-        max={1.5}
-        step={0.1}
-        value={ui}
-        onChange={ui => world.prefs.setUI(ui)}
-      />
-      {isBuilder && (
-        <MenuItemToggle
-          label='Build Prompts'
-          hint='Show or hide action prompts when in build mode'
-          value={actions}
-          onChange={actions => world.prefs.setActions(actions)}
-        />
-      )}
-      <MenuItemToggle
-        label='Stats'
-        hint='Show or hide performance stats'
-        value={world.prefs.stats}
-        onChange={stats => world.prefs.setStats(stats)}
-      />
-    </Menu>
-  )
-}
-
-const shadowOptions = [
-  { label: 'None', value: 'none' },
-  { label: 'Low', value: 'low' },
-  { label: 'Med', value: 'med' },
-  { label: 'High', value: 'high' },
-]
-function MenuMainGraphics({ world, pop, push }) {
+function MenuMainDisplay({ world, pop, push }) {
   const [dpr, setDPR] = useState(world.prefs.dpr)
-  const [shadows, setShadows] = useState(world.prefs.shadows)
-  const [postprocessing, setPostprocessing] = useState(world.prefs.postprocessing)
-  const [bloom, setBloom] = useState(world.prefs.bloom)
+  const [fieldOfView, setFieldOfView] = useState(world.prefs.fieldOfView)
+  const [gamma, setGamma] = useState(world.prefs.gamma)
+  const [brightness, setBrightness] = useState(world.prefs.brightness)
+  const [contrast, setContrast] = useState(world.prefs.contrast)
+
   const dprOptions = useMemo(() => {
     const width = world.graphics.width
     const height = world.graphics.height
@@ -131,7 +109,6 @@ function MenuMainGraphics({ world, pop, push }) {
     const options = []
     const add = (label, dpr) => {
       options.push({
-        // label: `${Math.round(width * dpr)} x ${Math.round(height * dpr)}`,
         label,
         value: dpr,
       })
@@ -142,50 +119,291 @@ function MenuMainGraphics({ world, pop, push }) {
     if (dpr >= 3) add('3x', dpr)
     return options
   }, [])
+
   useEffect(() => {
     const onChange = changes => {
       if (changes.dpr) setDPR(changes.dpr.value)
-      if (changes.shadows) setShadows(changes.shadows.value)
-      if (changes.postprocessing) setPostprocessing(changes.postprocessing.value)
-      if (changes.bloom) setBloom(changes.bloom.value)
+      if (changes.fieldOfView) setFieldOfView(changes.fieldOfView.value)
+      if (changes.gamma) setGamma(changes.gamma.value)
+      if (changes.brightness) setBrightness(changes.brightness.value)
+      if (changes.contrast) setContrast(changes.contrast.value)
     }
     world.prefs.on('change', onChange)
     return () => {
       world.prefs.off('change', onChange)
     }
   }, [])
+
   return (
-    <Menu title='Menu'>
+    <Menu title='Display'>
       <MenuItemBack hint='Go back to the main menu' onClick={pop} />
       <MenuItemSwitch
         label='Resolution'
-        hint='Change your display resolution'
+        hint='Change your display resolution scale'
         options={dprOptions}
         value={dpr}
         onChange={dpr => world.prefs.setDPR(dpr)}
       />
+      <MenuItemRange
+        label='Field of View'
+        hint='Adjust your viewing angle (60-120°)'
+        min={60}
+        max={120}
+        step={1}
+        value={fieldOfView}
+        onChange={fov => world.prefs.setFieldOfView(fov)}
+      />
+      <MenuItemRange
+        label='Gamma'
+        hint='Adjust brightness curve (1.8-2.6)'
+        min={1.8}
+        max={2.6}
+        step={0.1}
+        value={gamma}
+        onChange={gamma => world.prefs.setGamma(gamma)}
+      />
+      <MenuItemRange
+        label='Brightness'
+        hint='Adjust overall image brightness'
+        min={0.5}
+        max={2.0}
+        step={0.1}
+        value={brightness}
+        onChange={brightness => world.prefs.setBrightness(brightness)}
+      />
+      <MenuItemRange
+        label='Contrast'
+        hint='Adjust light/dark difference'
+        min={0.5}
+        max={2.0}
+        step={0.1}
+        value={contrast}
+        onChange={contrast => world.prefs.setContrast(contrast)}
+      />
+    </Menu>
+  )
+}
+
+function MenuMainGraphics({ world, pop, push }) {
+  const [shadows, setShadows] = useState(world.prefs.shadows)
+  const [renderer, setRenderer] = useState(world.prefs.renderer)
+  const [antialiasing, setAntialiasing] = useState(world.prefs.antialiasing)
+  const [textureQuality, setTextureQuality] = useState(world.prefs.textureQuality)
+  const [anisotropicFiltering, setAnisotropicFiltering] = useState(world.prefs.anisotropicFiltering)
+  const [lodDistance, setLODDistance] = useState(world.prefs.lodDistance)
+  const [toneMappingMode, setToneMappingMode] = useState(world.prefs.toneMappingMode)
+  const [toneMappingExposure, setToneMappingExposure] = useState(world.prefs.toneMappingExposure)
+
+  useEffect(() => {
+    const onChange = changes => {
+      if (changes.shadows) setShadows(changes.shadows.value)
+      if (changes.renderer) setRenderer(changes.renderer.value)
+      if (changes.antialiasing) setAntialiasing(changes.antialiasing.value)
+      if (changes.textureQuality) setTextureQuality(changes.textureQuality.value)
+      if (changes.anisotropicFiltering) setAnisotropicFiltering(changes.anisotropicFiltering.value)
+      if (changes.lodDistance) setLODDistance(changes.lodDistance.value)
+      if (changes.toneMappingMode) setToneMappingMode(changes.toneMappingMode.value)
+      if (changes.toneMappingExposure) setToneMappingExposure(changes.toneMappingExposure.value)
+    }
+    world.prefs.on('change', onChange)
+    return () => {
+      world.prefs.off('change', onChange)
+    }
+  }, [])
+
+  return (
+    <Menu title='Graphics'>
+      <MenuItemBack hint='Go back to the main menu' onClick={pop} />
+      <MenuItemSwitch
+        label='Renderer'
+        hint='Choose graphics API backend'
+        options={rendererOptions}
+        value={renderer}
+        onChange={newRenderer => world.prefs.setRenderer(newRenderer)}
+      />
       <MenuItemSwitch
         label='Shadows'
-        hint='Change the quality of shadows in the world'
+        hint='Shadow quality setting'
         options={shadowOptions}
         value={shadows}
         onChange={shadows => world.prefs.setShadows(shadows)}
       />
+      <MenuItemSwitch
+        label='Anti-Aliasing'
+        hint='Edge smoothing quality'
+        options={antialiasingOptions}
+        value={antialiasing}
+        onChange={aa => world.prefs.setAntialiasing(aa)}
+      />
+      <MenuItemSwitch
+        label='Texture Quality'
+        hint='Texture resolution setting'
+        options={textureQualityOptions}
+        value={textureQuality}
+        onChange={quality => world.prefs.setTextureQuality(quality)}
+      />
+      <MenuItemSwitch
+        label='Anisotropic Filtering'
+        hint='Texture sharpness at distance'
+        options={anisotropicOptions}
+        value={anisotropicFiltering}
+        onChange={af => world.prefs.setAnisotropicFiltering(af)}
+      />
+      <MenuItemRange
+        label='LOD Distance'
+        hint='Level of detail distance multiplier'
+        min={0.5}
+        max={2.0}
+        step={0.1}
+        value={lodDistance}
+        onChange={lod => world.prefs.setLODDistance(lod)}
+      />
+      <MenuItemSwitch
+        label='Tone Mapping'
+        hint='Color and brightness mapping'
+        options={toneMappingOptions}
+        value={toneMappingMode}
+        onChange={mode => world.prefs.setToneMappingMode(mode)}
+      />
+      <MenuItemRange
+        label='Exposure'
+        hint='Scene brightness adjustment'
+        min={0.1}
+        max={3.0}
+        step={0.1}
+        value={toneMappingExposure}
+        onChange={exposure => world.prefs.setToneMappingExposure(exposure)}
+      />
+    </Menu>
+  )
+}
+
+function MenuMainEffects({ world, pop, push }) {
+  const [postprocessing, setPostprocessing] = useState(world.prefs.postprocessing)
+  const [bloom, setBloom] = useState(world.prefs.bloom)
+  const [ao, setAO] = useState(world.prefs.ao)
+  const [depthOfField, setDepthOfField] = useState(world.prefs.depthOfField)
+  const [motionBlur, setMotionBlur] = useState(world.prefs.motionBlur)
+  const [ssReflections, setSSReflections] = useState(world.prefs.ssReflections)
+  const [volumetricLighting, setVolumetricLighting] = useState(world.prefs.volumetricLighting)
+
+  useEffect(() => {
+    const onChange = changes => {
+      if (changes.postprocessing) setPostprocessing(changes.postprocessing.value)
+      if (changes.bloom) setBloom(changes.bloom.value)
+      if (changes.ao) setAO(changes.ao.value)
+      if (changes.depthOfField) setDepthOfField(changes.depthOfField.value)
+      if (changes.motionBlur) setMotionBlur(changes.motionBlur.value)
+      if (changes.ssReflections) setSSReflections(changes.ssReflections.value)
+      if (changes.volumetricLighting) setVolumetricLighting(changes.volumetricLighting.value)
+    }
+    world.prefs.on('change', onChange)
+    return () => {
+      world.prefs.off('change', onChange)
+    }
+  }, [])
+
+  return (
+    <Menu title='Effects'>
+      <MenuItemBack hint='Go back to the main menu' onClick={pop} />
       <MenuItemToggle
-        label='Postprocessing'
-        hint='Enable or disable all postprocessing effects'
+        label='Post-Processing'
+        hint='Enable or disable all effects'
         trueLabel='On'
         falseLabel='Off'
         value={postprocessing}
         onChange={postprocessing => world.prefs.setPostprocessing(postprocessing)}
       />
+      {postprocessing && (
+        <>
+          <MenuItemToggle
+            label='Bloom'
+            hint='Bright object glow effect'
+            trueLabel='On'
+            falseLabel='Off'
+            value={bloom}
+            onChange={bloom => world.prefs.setBloom(bloom)}
+          />
+          {world.settings.ao && (
+            <MenuItemToggle
+              label='Ambient Occlusion'
+              hint='Realistic corner shadows'
+              trueLabel='On'
+              falseLabel='Off'
+              value={ao}
+              onChange={ao => world.prefs.setAO(ao)}
+            />
+          )}
+          <MenuItemToggle
+            label='Depth of Field'
+            hint='Camera-like focus blur'
+            trueLabel='On'
+            falseLabel='Off'
+            value={depthOfField}
+            onChange={dof => world.prefs.setDepthOfField(dof)}
+          />
+          <MenuItemToggle
+            label='Motion Blur'
+            hint='Fast movement blur effect'
+            trueLabel='On'
+            falseLabel='Off'
+            value={motionBlur}
+            onChange={mb => world.prefs.setMotionBlur(mb)}
+          />
+          <MenuItemToggle
+            label='Screen Space Reflections'
+            hint='Surface reflection effects'
+            trueLabel='On'
+            falseLabel='Off'
+            value={ssReflections}
+            onChange={ssr => world.prefs.setSSReflections(ssr)}
+          />
+          <MenuItemToggle
+            label='Volumetric Lighting'
+            hint='Atmospheric light rays'
+            trueLabel='On'
+            falseLabel='Off'
+            value={volumetricLighting}
+            onChange={vl => world.prefs.setVolumetricLighting(vl)}
+          />
+        </>
+      )}
+    </Menu>
+  )
+}
+
+function MenuMainPerformance({ world, pop, push }) {
+  const [vsync, setVSync] = useState(world.prefs.vsync)
+  const [frameRateLimit, setFrameRateLimit] = useState(world.prefs.frameRateLimit)
+
+  useEffect(() => {
+    const onChange = changes => {
+      if (changes.vsync) setVSync(changes.vsync.value)
+      if (changes.frameRateLimit) setFrameRateLimit(changes.frameRateLimit.value)
+    }
+    world.prefs.on('change', onChange)
+    return () => {
+      world.prefs.off('change', onChange)
+    }
+  }, [])
+
+  return (
+    <Menu title='Performance'>
+      <MenuItemBack hint='Go back to the main menu' onClick={pop} />
       <MenuItemToggle
-        label='Bloom'
-        hint='Enable or disable the bloom effect'
+        label='V-Sync'
+        hint='Prevent screen tearing'
         trueLabel='On'
         falseLabel='Off'
-        value={bloom}
-        onChange={bloom => world.prefs.setBloom(bloom)}
+        value={vsync}
+        onChange={vsync => world.prefs.setVSync(vsync)}
+      />
+      <MenuItemSwitch
+        label='Frame Rate Limit'
+        hint='Maximum frame rate cap'
+        options={frameRateLimitOptions}
+        value={frameRateLimit}
+        onChange={limit => world.prefs.setFrameRateLimit(limit)}
       />
     </Menu>
   )
@@ -195,6 +413,7 @@ function MenuMainAudio({ world, pop, push }) {
   const [music, setMusic] = useState(world.prefs.music)
   const [sfx, setSFX] = useState(world.prefs.sfx)
   const [voice, setVoice] = useState(world.prefs.voice)
+
   useEffect(() => {
     const onChange = changes => {
       if (changes.music) setMusic(changes.music.value)
@@ -206,12 +425,13 @@ function MenuMainAudio({ world, pop, push }) {
       world.prefs.off('change', onChange)
     }
   }, [])
+
   return (
-    <Menu title='Menu'>
+    <Menu title='Audio'>
       <MenuItemBack hint='Go back to the main menu' onClick={pop} />
       <MenuItemRange
         label='Music'
-        hint='Adjust general music volume'
+        hint='Background music volume'
         min={0}
         max={2}
         step={0.05}
@@ -219,8 +439,8 @@ function MenuMainAudio({ world, pop, push }) {
         onChange={music => world.prefs.setMusic(music)}
       />
       <MenuItemRange
-        label='SFX'
-        hint='Adjust sound effects volume'
+        label='Sound Effects'
+        hint='Game sound effects volume'
         min={0}
         max={2}
         step={0.05}
@@ -228,8 +448,8 @@ function MenuMainAudio({ world, pop, push }) {
         onChange={sfx => world.prefs.setSFX(sfx)}
       />
       <MenuItemRange
-        label='Voice'
-        hint='Adjust global voice chat volume'
+        label='Voice Chat'
+        hint='Voice communication volume'
         min={0}
         max={2}
         step={0.05}
@@ -240,89 +460,51 @@ function MenuMainAudio({ world, pop, push }) {
   )
 }
 
-function MenuMainWorld({ world, pop, push }) {
-  const player = world.entities.player
-  const { isAdmin } = usePermissions(world)
-  const [title, setTitle] = useState(world.settings.title)
-  const [desc, setDesc] = useState(world.settings.desc)
-  const [model, setModel] = useState(world.settings.model)
-  const [avatar, setAvatar] = useState(world.settings.avatar)
-  const [playerLimit, setPlayerLimit] = useState(world.settings.playerLimit)
-  const [publicc, setPublic] = useState(world.settings.public)
-  useEffect(() => {
-    const onChange = changes => {
-      if (changes.title) setTitle(changes.title.value)
-      if (changes.desc) setDesc(changes.desc.value)
-      if (changes.model) setModel(changes.model.value)
-      if (changes.avatar) setAvatar(changes.avatar.value)
-      if (changes.playerLimit) setPlayerLimit(changes.playerLimit.value)
-      if (changes.public) setPublic(changes.public.value)
-    }
-    world.settings.on('change', onChange)
-    return () => {
-      world.settings.off('change', onChange)
-    }
-  }, [])
+function MenuMainUI({ world, pop, push }) {
   return (
-    <Menu title='Menu'>
+    <Menu title='Interface'>
       <MenuItemBack hint='Go back to the main menu' onClick={pop} />
-      <MenuItemText
-        label='Title'
-        hint='Change the title of this world. Shown in the browser tab and when sharing links'
-        placeholder='World'
-        value={title}
-        onChange={value => world.settings.set('title', value, true)}
-      />
-      <MenuItemText
-        label='Description'
-        hint='Change the description of this world. Shown in previews when sharing links to this world'
-        value={desc}
-        onChange={value => world.settings.set('desc', value, true)}
-      />
-      <MenuItemFile
-        label='Environment'
-        hint='Change the global environment model'
-        kind='model'
-        value={model}
-        onChange={value => world.settings.set('model', value, true)}
-        world={world}
-      />
-      <MenuItemFile
-        label='Avatar'
-        hint='Change the default avatar everyone spawns into the world with'
-        kind='avatar'
-        value={avatar}
-        onChange={value => world.settings.set('avatar', value, true)}
-        world={world}
-      />
-      <MenuItemNumber
-        label='Player Limit'
-        hint='Set a maximum number of players that can be in the world at one time. Zero means unlimited.'
-        value={playerLimit}
-        onChange={value => world.settings.set('playerLimit', value, true)}
-      />
-      {isAdmin && (
-        <MenuItemToggle
-          label='Public'
-          hint='Allow everyone to build (and destroy) things in the world. When disabled only admins can build.'
-          value={publicc}
-          onChange={value => world.settings.set('public', value, true)}
-        />
-      )}
-      <MenuItemBtn
-        label='Set Spawn'
-        hint='Sets the location players spawn to the location you are currently standing'
-        onClick={() => {
-          world.network.send('spawnModified', 'set')
-        }}
-      />
-      <MenuItemBtn
-        label='Clear Spawn'
-        hint='Resets the spawn point to origin'
-        onClick={() => {
-          world.network.send('spawnModified', 'clear')
-        }}
-      />
+      <MenuItemBtn label='Coming Soon' hint='UI customization options' disabled />
     </Menu>
   )
+}
+
+function MenuMainWorld({ world, pop, push }) {
+  return (
+    <Menu title='World'>
+      <MenuItemBack hint='Go back to the main menu' onClick={pop} />
+      <MenuItemBtn label='World Settings' hint='Configure world properties' disabled />
+      <MenuItemBtn label='Player Management' hint='Manage world permissions' disabled />
+    </Menu>
+  )
+}
+
+export default function MenuMain({ world, hidden, route, ...routeProps }) {
+  const { isAdmin, isBuilder } = usePermissions(world)
+
+  if (!route || route === 'index') {
+    return <MenuMainIndex world={world} {...routeProps} />
+  }
+  if (route === 'ui') {
+    return <MenuMainUI world={world} {...routeProps} />
+  }
+  if (route === 'display') {
+    return <MenuMainDisplay world={world} {...routeProps} />
+  }
+  if (route === 'graphics') {
+    return <MenuMainGraphics world={world} {...routeProps} />
+  }
+  if (route === 'effects') {
+    return <MenuMainEffects world={world} {...routeProps} />
+  }
+  if (route === 'performance') {
+    return <MenuMainPerformance world={world} {...routeProps} />
+  }
+  if (route === 'audio') {
+    return <MenuMainAudio world={world} {...routeProps} />
+  }
+  if (route === 'world') {
+    return <MenuMainWorld world={world} {...routeProps} />
+  }
+  return null
 }

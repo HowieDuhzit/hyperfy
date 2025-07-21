@@ -56,6 +56,7 @@ import { DEG2RAD, RAD2DEG } from '../../core/extras/general'
 import * as THREE from '../../core/extras/three'
 import { isTouch } from '../utils'
 import { uuid } from '../../core/utils'
+import MenuMain from './MenuMain'
 
 const mainSectionPanes = ['prefs']
 const worldSectionPanes = ['world', 'docs', 'apps', 'add']
@@ -77,15 +78,28 @@ export function Sidebar({ world, ui }) {
   const { isAdmin, isBuilder } = usePermissions(world)
   const player = world.entities.player
   const [livekit, setLiveKit] = useState(() => world.livekit.status)
+  const [buildMode, setBuildMode] = useState(() => world.builder?.enabled || false)
+  
   useEffect(() => {
     const onLiveKitStatus = status => {
       setLiveKit({ ...status })
     }
+    const onBuildMode = enabled => {
+      setBuildMode(enabled)
+      // When build mode is enabled, automatically show the apps list only if no menu is open
+      if (enabled && isBuilder && !ui.pane && !ui.app) {
+        world.ui.togglePane('apps')
+      }
+    }
+    
     world.livekit.on('status', onLiveKitStatus)
+    world.on('build-mode', onBuildMode)
+    
     return () => {
       world.livekit.off('status', onLiveKitStatus)
+      world.off('build-mode', onBuildMode)
     }
-  }, [])
+  }, [isBuilder, ui.pane])
   const activePane = ui.active ? ui.pane : null
   return (
     <HintProvider>
@@ -116,48 +130,55 @@ export function Sidebar({ world, ui }) {
         `}
       >
         <div className='sidebar-sections'>
-          <Section active={activePane} bottom>
-            <Btn
-              active={activePane === 'prefs'}
-              suspended={ui.pane === 'prefs' && !activePane}
-              onClick={() => world.ui.togglePane('prefs')}
-            >
-              <MenuIcon size='1.25rem' />
-            </Btn>
-            {isTouch && (
-              <Btn
-                onClick={() => {
-                  world.emit('sidebar-chat-toggle')
-                }}
-              >
-                <MessageSquareTextIcon size='1.25rem' />
-              </Btn>
-            )}
-            {livekit.available && !livekit.connected && (
-              <Btn disabled>
-                <MicOffIcon size='1.25rem' />
-              </Btn>
-            )}
-            {livekit.available && livekit.connected && (
-              <Btn
-                onClick={() => {
-                  world.livekit.setMicrophoneEnabled()
-                }}
-              >
-                {livekit.mic ? <MicIcon size='1.25rem' /> : <MicOffIcon size='1.25rem' />}
-              </Btn>
-            )}
-            {world.xr.supportsVR && (
-              <Btn
-                onClick={() => {
-                  world.xr.enter()
-                }}
-              >
-                <VRIcon size='1.25rem' />
-              </Btn>
-            )}
-          </Section>
-          {isBuilder && (
+          {/* Utility buttons - Only show section when there are buttons to display */}
+          {(activePane === 'prefs' || isTouch || livekit.available || world.xr.supportsVR) && (
+            <Section active={activePane} bottom>
+              {/* Show hamburger icon only when main menu is open */}
+              {activePane === 'prefs' && (
+                <Btn
+                  active={true}
+                  onClick={() => world.ui.togglePane('prefs')}
+                >
+                  <MenuIcon size='1.25rem' />
+                </Btn>
+              )}
+              {isTouch && (
+                <Btn
+                  onClick={() => {
+                    world.emit('sidebar-chat-toggle')
+                  }}
+                >
+                  <MessageSquareTextIcon size='1.25rem' />
+                </Btn>
+              )}
+              {livekit.available && !livekit.connected && (
+                <Btn disabled>
+                  <MicOffIcon size='1.25rem' />
+                </Btn>
+              )}
+              {livekit.available && livekit.connected && (
+                <Btn
+                  onClick={() => {
+                    world.livekit.setMicrophoneEnabled()
+                  }}
+                >
+                  {livekit.mic ? <MicIcon size='1.25rem' /> : <MicOffIcon size='1.25rem' />}
+                </Btn>
+              )}
+              {world.xr.supportsVR && (
+                <Btn
+                  onClick={() => {
+                    world.xr.enter()
+                  }}
+                >
+                  <VRIcon size='1.25rem' />
+                </Btn>
+              )}
+            </Section>
+          )}
+          
+          {/* Build Mode UI (TAB) - Only when in build mode */}
+          {buildMode && isBuilder && (
             <Section active={activePane} top bottom>
               <Btn
                 active={activePane === 'world'}
@@ -166,13 +187,6 @@ export function Sidebar({ world, ui }) {
               >
                 <EarthIcon size='1.25rem' />
               </Btn>
-              {/* <Btn
-              active={activePane === 'docs'}
-              suspended={ui.pane === 'docs' && !activePane}
-              onClick={() => world.ui.togglePane('docs')}
-            >
-              <BookTextIcon size='1.25rem' />
-            </Btn> */}
               <Btn
                 active={activePane === 'apps'}
                 suspended={ui.pane === 'apps' && !activePane}
@@ -189,6 +203,8 @@ export function Sidebar({ world, ui }) {
               </Btn>
             </Section>
           )}
+          
+          {/* App Inspection UI - Only when an app is selected */}
           {ui.app && (
             <Section active={activePane} top bottom>
               <Btn
@@ -222,7 +238,7 @@ export function Sidebar({ world, ui }) {
             </Section>
           )}
         </div>
-        {ui.pane === 'prefs' && <Prefs world={world} hidden={!ui.active} />}
+        {ui.pane === 'prefs' && <MainMenu world={world} hidden={!ui.active} />}
         {ui.pane === 'world' && <World world={world} hidden={!ui.active} />}
         {ui.pane === 'apps' && <Apps world={world} hidden={!ui.active} />}
         {ui.pane === 'add' && <Add world={world} hidden={!ui.active} />}
@@ -405,6 +421,47 @@ function Group({ label }) {
         </div>
       )}
     </>
+  )
+}
+
+function MainMenu({ world, hidden }) {
+  const [route, setRoute] = useState('index')
+  const [routeStack, setRouteStack] = useState(['index'])
+  
+  const push = (newRoute) => {
+    setRouteStack(prev => [...prev, newRoute])
+    setRoute(newRoute)
+  }
+  
+  const pop = () => {
+    setRouteStack(prev => {
+      const newStack = prev.slice(0, -1)
+      const newRoute = newStack[newStack.length - 1] || 'index'
+      setRoute(newRoute)
+      return newStack
+    })
+  }
+  
+  return (
+    <Pane hidden={hidden}>
+      <div
+        className='main-menu'
+        css={css`
+          background: rgba(11, 10, 21, 0.9);
+          border: 1px solid rgba(255, 255, 255, 0.05);
+          border-radius: 1.375rem;
+          overflow: hidden;
+        `}
+      >
+        <MenuMain 
+          world={world} 
+          hidden={hidden} 
+          route={route} 
+          pop={pop} 
+          push={push} 
+        />
+      </div>
+    </Pane>
   )
 }
 

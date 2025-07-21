@@ -1,6 +1,8 @@
 import * as THREE from '../extras/three'
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js'
+import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js'
 import { VRMLoaderPlugin } from '@pixiv/three-vrm'
 
 import { System } from './System'
@@ -20,6 +22,7 @@ import Hls from 'hls.js/dist/hls.js'
  *
  * - Runs on the client
  * - Basic file loader for many different formats, cached.
+ * - Enhanced with KTX2 compressed textures and DRACO geometry compression
  *
  */
 export class ClientLoader extends System {
@@ -28,14 +31,57 @@ export class ClientLoader extends System {
     this.files = new Map()
     this.promises = new Map()
     this.results = new Map()
+    
+    // Standard loaders
     this.rgbeLoader = new RGBELoader()
-    this.texLoader = new TextureLoader()
+    this.texLoader = new THREE.TextureLoader()
     this.gltfLoader = new GLTFLoader()
     this.gltfLoader.register(parser => new VRMLoaderPlugin(parser))
+    
+    // Advanced compression loaders
+    this.ktx2Loader = null
+    this.dracoLoader = null
+    
     this.preloadItems = []
+    
+    // Initialize advanced loaders
+    this.initAdvancedLoaders()
+  }
+
+  async initAdvancedLoaders() {
+    try {
+      // Initialize KTX2Loader for compressed textures
+      this.ktx2Loader = new KTX2Loader()
+      this.ktx2Loader.setTranscoderPath('/libs/basis/')
+      
+      // Initialize DRACOLoader for geometry compression
+      this.dracoLoader = new DRACOLoader()
+      this.dracoLoader.setDecoderPath('/libs/draco/')
+      this.dracoLoader.preload()
+      
+      console.log('🚀 Advanced compression loaders initialized: KTX2 + DRACO')
+    } catch (error) {
+      console.warn('⚠️ Advanced loaders initialization failed:', error)
+    }
   }
 
   start() {
+    // Detect renderer support and configure compression loaders
+    if (this.world.graphics?.renderer) {
+      if (this.ktx2Loader) {
+        this.ktx2Loader.detectSupport(this.world.graphics.renderer)
+        
+        // Configure GLTFLoader with KTX2 support
+        this.gltfLoader.setKTX2Loader(this.ktx2Loader)
+        console.log('✅ KTX2 compression enabled for GLTF models')
+      }
+      
+      if (this.dracoLoader) {
+        // Configure GLTFLoader with DRACO support
+        this.gltfLoader.setDRACOLoader(this.dracoLoader)
+        console.log('✅ DRACO geometry compression enabled for GLTF models')
+      }
+    }
     this.vrmHooks = {
       camera: this.world.camera,
       scene: this.world.stage.scene,
@@ -166,6 +212,15 @@ export class ClientLoader extends System {
           img.src = URL.createObjectURL(file)
         })
       }
+      if (type === 'ktx2') {
+        if (!this.ktx2Loader) {
+          throw new Error('KTX2Loader not initialized')
+        }
+        const buffer = await file.arrayBuffer()
+        const texture = await this.ktx2Loader.parseAsync(buffer)
+        this.results.set(key, texture)
+        return texture
+      }
       if (type === 'model') {
         const buffer = await file.arrayBuffer()
         const glb = await this.gltfLoader.parseAsync(buffer)
@@ -272,6 +327,16 @@ export class ClientLoader extends System {
         this.results.set(key, texture)
         return texture
       })
+    }
+    if (type === 'ktx2') {
+      if (!this.ktx2Loader) {
+        promise = Promise.reject(new Error('KTX2Loader not initialized'))
+      } else {
+        promise = this.ktx2Loader.loadAsync(localUrl).then(texture => {
+          this.results.set(key, texture)
+          return texture
+        })
+      }
     }
     if (type === 'model') {
       promise = this.gltfLoader.loadAsync(localUrl).then(glb => {

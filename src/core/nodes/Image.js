@@ -121,13 +121,42 @@ export class Image extends Node {
       uColor: { value: new THREE.Color(this._color) },
       uTransparent: { value: this._color === 'transparent' ? 1.0 : 0.0 },
     }
-    const material = new CustomShaderMaterial({
-      baseMaterial: this._lit ? THREE.MeshStandardMaterial : THREE.MeshBasicMaterial,
-      ...(this._lit ? { roughness: 1, metalness: 0 } : {}),
-      side: this._doubleside ? THREE.DoubleSide : THREE.FrontSide,
-      transparent: this._color === 'transparent',
-      uniforms,
-      vertexShader: `
+    // WebGPU compatibility: Check if WebGPU renderer is being used
+    const renderer = this.world.graphics?.renderer
+    const isWebGPU = renderer && (renderer.isWebGPURenderer || renderer.constructor.name === 'WebGPURenderer')
+    
+    let material
+    
+    if (isWebGPU) {
+      // Use basic material for WebGPU compatibility
+      console.log('Using basic material for Image node (WebGPU compatibility)')
+      material = this._lit ? new THREE.MeshStandardMaterial() : new THREE.MeshBasicMaterial()
+      
+      if (this._lit) {
+        material.roughness = 1
+        material.metalness = 0
+      }
+      
+      material.side = this._doubleside ? THREE.DoubleSide : THREE.FrontSide
+      material.transparent = this._color === 'transparent'
+      
+      // Basic texture application for WebGPU
+      if (uniforms.uMap.value) {
+        material.map = uniforms.uMap.value
+      }
+      
+      if (this._color !== 'white') {
+        material.color.set(uniforms.uColor.value)
+      }
+    } else {
+      // Use CustomShaderMaterial for WebGL
+      material = new CustomShaderMaterial({
+        baseMaterial: this._lit ? THREE.MeshStandardMaterial : THREE.MeshBasicMaterial,
+        ...(this._lit ? { roughness: 1, metalness: 0 } : {}),
+        side: this._doubleside ? THREE.DoubleSide : THREE.FrontSide,
+        transparent: this._color === 'transparent',
+        uniforms,
+        vertexShader: `
         varying vec2 vUv;
         void main() {
           vUv = uv;
@@ -215,7 +244,9 @@ export class Image extends Node {
           csm_DiffuseColor = col;
         }
       `,
-    })
+      })
+    }
+    
     this.ctx.world.setupMaterial(material)
     this.mesh = new THREE.Mesh(geometry, material)
     this.mesh.castShadow = this._castShadow

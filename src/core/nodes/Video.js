@@ -145,13 +145,39 @@ export class Video extends Node {
         uOffset: { value: new THREE.Vector2(0, 0) },
       }
       // const color = this.instance?.ready ? 'white' : this._color
-      material = new CustomShaderMaterial({
-        baseMaterial: this._lit ? THREE.MeshStandardMaterial : THREE.MeshBasicMaterial,
-        ...(this._lit ? { roughness: 1, metalness: 0 } : {}),
-        // color,
-        side: this._doubleside ? THREE.DoubleSide : THREE.FrontSide,
-        uniforms,
-        vertexShader: `
+      // WebGPU compatibility: Check if WebGPU renderer is being used
+      const renderer = this.world.graphics?.renderer
+      const isWebGPU = renderer && (renderer.isWebGPURenderer || renderer.constructor.name === 'WebGPURenderer')
+      
+      if (isWebGPU) {
+        // Use basic material for WebGPU compatibility
+        console.log('Using basic material for Video node (WebGPU compatibility)')
+        material = this._lit ? new THREE.MeshStandardMaterial() : new THREE.MeshBasicMaterial()
+        
+        if (this._lit) {
+          material.roughness = 1
+          material.metalness = 0
+        }
+        
+        material.side = this._doubleside ? THREE.DoubleSide : THREE.FrontSide
+        
+        // Apply basic video texture for WebGPU
+        if (uniforms.uMap.value) {
+          material.map = uniforms.uMap.value
+        }
+        
+        if (this._color !== 'white') {
+          material.color.set(uniforms.uColor.value)
+        }
+      } else {
+        // Use CustomShaderMaterial for WebGL
+        material = new CustomShaderMaterial({
+          baseMaterial: this._lit ? THREE.MeshStandardMaterial : THREE.MeshBasicMaterial,
+          ...(this._lit ? { roughness: 1, metalness: 0 } : {}),
+          // color,
+          side: this._doubleside ? THREE.DoubleSide : THREE.FrontSide,
+          uniforms,
+          vertexShader: `
           varying vec2 vUv;
           void main() {
             vUv = uv;
@@ -243,7 +269,9 @@ export class Video extends Node {
             csm_DiffuseColor = sRGBToLinear(col);
           }
         `,
-      })
+        })
+      }
+      
       this.ctx.world.setupMaterial(material)
 
       let geometry

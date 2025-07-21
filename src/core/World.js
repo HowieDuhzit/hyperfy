@@ -12,6 +12,9 @@ import { Entities } from './systems/Entities'
 import { Physics } from './systems/Physics'
 import { Stage } from './systems/Stage'
 import { Scripts } from './systems/Scripts'
+import { AdvancedLOD } from './systems/AdvancedLOD'
+import { TextureAtlas } from './systems/TextureAtlas'
+import { BatchedMeshSystem } from './systems/BatchedMeshSystem'
 
 export class World extends EventEmitter {
   constructor() {
@@ -45,6 +48,9 @@ export class World extends EventEmitter {
     this.register('entities', Entities)
     this.register('physics', Physics)
     this.register('stage', Stage)
+    this.register('advancedLOD', AdvancedLOD)
+    this.register('textureAtlas', TextureAtlas)
+    this.register('batchedMesh', BatchedMeshSystem)
   }
 
   register(key, System) {

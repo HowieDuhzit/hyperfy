@@ -8,6 +8,7 @@ const appPanes = ['app', 'script', 'nodes', 'meta']
 export class ClientUI extends System {
   constructor(world) {
     super(world)
+    console.log('🔥🔥🔥 ClientUI CONSTRUCTOR CALLED!!! 🔥🔥🔥')
     this.state = {
       visible: true,
       active: false,
@@ -20,18 +21,14 @@ export class ClientUI extends System {
   }
 
   start() {
+    console.log('🚨 ClientUI STARTED - ESC handler is active! Timestamp:', Date.now())
     this.control = this.world.controls.bind({ priority: ControlPriorities.CORE_UI })
   }
 
   update() {
     if (this.control.escape.pressed) {
-      if (this.state.pane) {
-        this.state.pane = null
-        this.broadcast()
-      } else if (this.state.app) {
-        this.state.app = null
-        this.broadcast()
-      }
+      console.log('🚨🚨🚨 ESC KEY DETECTED!!! 🚨🚨🚨')
+      this.handleEscape()
     }
     if (
       this.control.keyZ.pressed &&
@@ -42,24 +39,16 @@ export class ClientUI extends System {
       this.state.visible = !this.state.visible
       this.broadcast()
     }
-    if (this.control.pointer.locked && this.state.active) {
-      this.state.active = false
-      this.broadcast()
-    }
-    if (!this.control.pointer.locked && !this.state.active) {
-      this.state.active = true
-      this.broadcast()
-    }
+    // Remove automatic UI state management - let ESC handler control it explicitly
   }
 
   togglePane(pane) {
     if (pane === null || this.state.pane === pane) {
       this.state.pane = null
+      this.state.active = false
     } else {
-      // if (appPanes.includes(this.state.pane) && !appPanes.includes(pane)) {
-      //   this.state.app = null
-      // }
       this.state.pane = pane
+      this.state.active = true
       if (appPanes.includes(pane)) {
         this.lastAppPane = pane
       }
@@ -77,6 +66,7 @@ export class ClientUI extends System {
   setApp(app) {
     this.state.app = app
     this.state.pane = app ? this.lastAppPane : null
+    this.state.active = !!app
     this.broadcast()
   }
 
@@ -107,12 +97,39 @@ export class ClientUI extends System {
     return promise
   }
 
+  handleEscape() {
+    console.log('ESC - Current state:', { 
+      pane: this.state.pane, 
+      app: this.state.app, 
+      pointerLocked: this.control?.pointer?.locked 
+    })
+    
+    // If any menu is open, close it and lock cursor
+    if (this.state.pane || this.state.app) {
+      console.log('Closing menu/app and locking cursor')
+      this.state.pane = null
+      this.state.app = null
+      this.state.active = false
+      this.control.pointer.lock()
+      this.broadcast()
+      return
+    }
+    
+    // Otherwise, open main menu and unlock cursor
+    console.log('Opening main menu and unlocking cursor')
+    this.state.pane = 'prefs'
+    this.state.active = true
+    this.control.pointer.unlock()
+    this.broadcast()
+  }
+
   broadcast() {
     this.world.emit('ui', { ...this.state })
   }
 
-  destroy() {
+    destroy() {
     this.control?.release()
     this.control = null
   }
 }
+

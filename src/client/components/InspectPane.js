@@ -843,6 +843,14 @@ function Fields({ app, blueprint }) {
     
     // Default behavior for single field updates
     props[key] = value
+    
+    // Auto-switch to "Custom" when modifying a preset
+    if (key !== 'preset' && key !== 'savePreset' && props.preset && props.preset !== 'custom') {
+      // User is modifying a setting while a preset is selected - switch to custom
+      props.preset = 'custom'
+      console.log(`Switched to custom preset after modifying "${key}"`)
+    }
+    
     // update blueprint locally (also rebuilds apps)
     const id = blueprint.id
     const version = blueprint.version + 1
