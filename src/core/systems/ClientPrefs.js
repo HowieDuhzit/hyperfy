@@ -70,7 +70,7 @@ export class ClientPrefs extends System {
     this.contrast = isNumber(data.contrast) ? data.contrast : 1.0
     
     // Rendering settings
-    this.renderer = data.renderer ? data.renderer : 'auto' // auto, webgpu, webgl
+    this.renderer = data.renderer ? data.renderer : 'webgl' // auto, webgpu, webgl
     this.shadows = data.shadows ? data.shadows : isTouch ? 'low' : 'med' // none, low=1, med=2048cascade, high=4096cascade
     this.antialiasing = data.antialiasing ? data.antialiasing : isTouch ? 'fxaa' : 'smaa' // none, fxaa, smaa, taa, msaa2x, msaa4x, msaa8x
     this.textureQuality = data.textureQuality ? data.textureQuality : isTouch ? 'medium' : 'high' // low, medium, high, ultra

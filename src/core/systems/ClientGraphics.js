@@ -141,7 +141,7 @@ export class ClientGraphics extends System {
     this.aspect = this.width / this.height
     
     // Initialize renderer with user preference
-    const rendererPreference = this.world.prefs?.renderer || 'auto'
+    const rendererPreference = this.world.prefs?.renderer || 'webgl'
     this.renderer = await getRenderer(rendererPreference)
     this.isWebGPU = this.renderer.isWebGPURenderer || false
     
