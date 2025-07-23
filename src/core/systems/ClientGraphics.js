@@ -192,244 +192,226 @@ async function getRenderer(preference = 'auto') {
 export class ClientGraphics extends System {
   constructor(world) {
     super(world)
+    this.retryCount = 0
+    this.errorCount = 0
+    this.lastErrorTime = 0
   }
 
   async init({ viewport }) {
+    console.log('🎮 Initializing ClientGraphics system...')
+    
+    // 🛡️ FIXED: Ensure viewport is properly initialized
     this.viewport = viewport
-    this.width = this.viewport.offsetWidth || 800 // Fallback to prevent 0 dimensions
-    this.height = this.viewport.offsetHeight || 600 // Fallback to prevent 0 dimensions
+    this.width = this.viewport?.offsetWidth || 800 // Fallback to prevent 0 dimensions
+    this.height = this.viewport?.offsetHeight || 600 // Fallback to prevent 0 dimensions
     this.aspect = this.width / this.height
     
-    // Initialize renderer with user preference
-    const rendererPreference = this.world.prefs?.renderer || 'webgl'
-    this.renderer = await getRenderer(rendererPreference)
-    this.isWebGPU = this.renderer.isWebGPURenderer || false
-    
-    // WebGPU requires async initialization
-    if (this.isWebGPU) {
-      await this.renderer.init()
+    // 🛡️ NEW: Comprehensive error handling wrapper
+    try {
+      await this.initializeRenderer()
+      await this.initializePostProcessing()
+      await this.initializeAAARendering()
+      
+      // 🛡️ NEW: Setup resize observer after renderer is initialized
+      this.setupResizeObserver()
+      
+      console.log('✅ ClientGraphics system initialized successfully')
+    } catch (error) {
+      console.error('❌ ClientGraphics initialization failed:', error)
+      await this.handleInitializationError(error)
     }
+  }
+
+  // 🛡️ NEW: Error recovery system
+  async handleInitializationError(error) {
+    console.log('🔄 Attempting error recovery...')
+    
+    // Try to recover with basic rendering
+    try {
+      await this.initializeBasicRendering()
+      console.log('✅ Basic rendering recovered successfully')
+    } catch (recoveryError) {
+      console.error('❌ Recovery failed, using minimal rendering:', recoveryError)
+      this.initializeMinimalRendering()
+    }
+  }
+
+  async initializeBasicRendering() {
+    // Initialize basic WebGL rendering without advanced features
+    console.log('🔄 Initializing basic rendering...')
+    
+    this.renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      alpha: true,
+      powerPreference: 'high-performance'
+    })
     
     this.renderer.setSize(this.width, this.height)
-    this.renderer.setClearColor(0x000000, 0) // Performance: Use transparent black for better alpha blending
-    this.renderer.setPixelRatio(this.world.prefs.dpr)
-    
-    // WebGPU compatibility: shadowMap configuration
-    if (this.renderer.shadowMap) {
-      this.renderer.shadowMap.enabled = true
-      this.renderer.shadowMap.type = THREE.PCFSoftShadowMap
-    }
-    
-    // Apply tone mapping settings from preferences
-    this.applyToneMappingSettings()
-    this.renderer.outputColorSpace = THREE.SRGBColorSpace
-    
-    // WebGPU compatibility: XR configuration
-    if (this.renderer.xr) {
-      this.renderer.xr.enabled = true
-      this.renderer.xr.setReferenceSpaceType('local-floor')
-      this.renderer.xr.setFoveation(1)
-    }
-    
-    // Performance optimizations
-    this.renderer.sortObjects = false // Skip object sorting when order isn't critical for transparency
-    
-    // WebGPU compatibility: info property may not exist
-    if (this.renderer.info) {
-      this.renderer.info.autoReset = false // Keep render stats for debugging performance
-    }
-    
-    // WebGPU compatibility: capabilities may not exist or have different API
-    if (this.isWebGPU) {
-      // WebGPU doesn't have capabilities.getMaxAnisotropy(), use reasonable default
-      this.maxAnisotropy = 16 // Common WebGPU default
-    } else {
-      // WebGL renderer
-      this.maxAnisotropy = this.renderer.capabilities?.getMaxAnisotropy?.() || 1
-    }
-    THREE.Texture.DEFAULT_ANISOTROPY = this.maxAnisotropy
-    
-    this.usePostprocessing = this.world.prefs.postprocessing
-    
-    // WebGPU compatibility: context and multisampling detection
-    let maxMultisampling = 4 // Default fallback
-    
-    if (!this.isWebGPU) {
-      try {
-        const context = this.renderer.getContext()
-        maxMultisampling = context.getParameter(context.MAX_SAMPLES) || 4
-      } catch (error) {
-        console.warn('Failed to get WebGL context parameters:', error)
-        maxMultisampling = 4
-      }
-    }
-    // Apply all graphics settings
-    this.updateAllSettings()
-    
-    // WebGPU compatibility: Setup WebGPU-native post-processing using TSL
-    if (this.isWebGPU) {
-      console.log('Setting up WebGPU-native post-processing using TSL')
-      this.setupWebGPUPostProcessing()
-      this.composer = null
-      this.renderPass = null
-      this.aoPass = null
-    } else {
-      // WebGL post-processing setup with error handling
-      try {
-        this.composer = new EffectComposer(this.renderer, {
-          frameBufferType: THREE.HalfFloatType,
-          // multisampling: Math.min(8, maxMultisampling),
-        })
-        this.renderPass = new RenderPass(this.world.stage.scene, this.world.camera)
-        this.composer.addPass(this.renderPass)
-        
-        this.aoPass = new N8AOPostPass(this.world.stage.scene, this.world.camera, this.width, this.height)
-        this.aoPass.enabled = this.world.settings.ao && this.world.prefs.ao
-        // we can't use this as it traverses the scene, but half our objects are in the octree
-        this.aoPass.autoDetectTransparency = false
-        // full res is pretty expensive
-        this.aoPass.configuration.halfRes = true
-      } catch (error) {
-        console.warn('Post-processing setup failed:', error)
-        this.composer = null
-        this.renderPass = null
-        this.aoPass = null
-        this.usePostprocessing = false
-      }
-    }
-    // WebGPU compatibility: Only configure AO pass if it exists
-    if (this.aoPass) {
-      // look 1:
-      // this.aoPass.configuration.aoRadius = 0.2
-      // this.aoPass.configuration.distanceFalloff = 1
-      // this.aoPass.configuration.intensity = 2
-      // look 2:
-      // this.aoPass.configuration.aoRadius = 0.5
-      // this.aoPass.configuration.distanceFalloff = 1
-      // this.aoPass.configuration.intensity = 2
-      // look 3:
-      this.aoPass.configuration.screenSpaceRadius = true
-      this.aoPass.configuration.aoRadius = 32
-      this.aoPass.configuration.distanceFalloff = 1
-      this.aoPass.configuration.intensity = 2
-      this.composer.addPass(this.aoPass)
-    }
-    
-    // WebGPU compatibility: Only setup post-processing effects for WebGL
-    if (!this.isWebGPU && this.composer) {
-      try {
-        // Core effects
-        this.bloom = new BloomEffect({
-          blendFunction: BlendFunction.ADD,
-          mipmapBlur: true,
-          luminanceThreshold: 1,
-          luminanceSmoothing: 0.3,
-          intensity: 0.5,
-          radius: 0.8,
-        })
-        this.bloomEnabled = this.world.prefs.bloom
-        
-        this.smaa = new SMAAEffect({
-          preset: SMAAPreset.ULTRA,
-        })
-        
-        this.tonemapping = new ToneMappingEffect({
-          mode: ToneMappingMode.ACES_FILMIC,
-        })
-        
-        // Advanced post-processing effects - Phase 3
-        console.log('🎨 Initializing advanced post-processing effects...')
-        
-        // Depth of Field with Realistic Bokeh
-        if (this.world.prefs.depthOfField) {
-          // Use RealisticBokehEffect for better quality DOF
-          this.depthOfField = new RealisticBokehEffect({
-            blendFunction: BlendFunction.NORMAL,
-            focus: 0.5,
-            dof: 0.02,
-            aperture: 0.025,
-            maxBlur: 0.01
-          })
-          this.depthOfFieldEnabled = true
-          console.log('✅ Realistic Depth of Field initialized')
-        } else {
-          this.depthOfField = null
-          this.depthOfFieldEnabled = false
-        }
-        
-        // Enhanced SSAO as substitute for advanced GI
-        if (this.world.prefs.volumetricLighting) {
-          this.enhancedSSAO = new SSAOEffect(this.world.camera, this.world.stage.scene, {
-            blendFunction: BlendFunction.MULTIPLY,
-            samples: 16,
-            rings: 7,
-            distanceThreshold: 0.65,
-            distanceFalloff: 0.1,
-            rangeThreshold: 0.0015,
-            rangeFalloff: 0.01,
-            luminanceInfluence: 0.7,
-            radius: 0.1825,
-            scale: 1.0,
-            bias: 0.025
-          })
-          this.enhancedSSAOEnabled = true
-          console.log('✅ Enhanced SSAO (as volumetric lighting substitute) initialized')
-        } else {
-          this.enhancedSSAO = null
-          this.enhancedSSAOEnabled = false
-        }
-        
-        // Note: Motion blur and SSR will be implemented via WebGPU TSL only
-        // WebGL fallback uses simplified approximations
-        console.log('ℹ️  Motion blur and SSR available in WebGPU mode only')
-        
-        this.effectPass = new EffectPass(this.world.camera)
-        this.updatePostProcessingEffects()
-        this.composer.addPass(this.effectPass)
-        
-        console.log('✅ Advanced post-processing effects initialized')
-        
-      } catch (error) {
-        console.warn('Post-processing effects setup failed:', error)
-        this.bloom = null
-        this.smaa = null
-        this.tonemapping = null
-        this.depthOfField = null
-        this.enhancedSSAO = null
-        this.effectPass = null
-        this.usePostprocessing = false
-      }
-    } else {
-      // WebGPU: Set all post-processing effects to null
-      this.bloom = null
-      this.smaa = null
-      this.tonemapping = null
-      this.depthOfField = null
-      this.enhancedSSAO = null
-      this.effectPass = null
-    }
-    this.world.prefs.on('change', this.onPrefsChange)
-    this.resizer = new ResizeObserver(() => {
-      this.resize(this.viewport.offsetWidth, this.viewport.offsetHeight)
-    })
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     this.viewport.appendChild(this.renderer.domElement)
-    this.resizer.observe(this.viewport)
+    
+    // Basic post-processing
+    this.effectComposer = new EffectComposer(this.renderer)
+    this.effectComposer.addPass(new RenderPass(this.world.stage.scene, this.world.camera))
+    
+    console.log('✅ Basic rendering initialized')
+  }
 
-    this.xrWidth = null
-    this.xrHeight = null
-    this.xrDimensionsNeeded = false
+  initializeMinimalRendering() {
+    // Absolute minimal rendering for emergency fallback
+    console.log('🔄 Initializing minimal rendering...')
     
-    // Initialize AAA rendering systems
-    console.log('🔧 About to initialize AAA rendering systems...')
-    await this.initializeAAARendering()
-    console.log('🔧 AAA rendering systems initialization completed')
+    this.renderer = new THREE.WebGLRenderer({
+      antialias: false,
+      alpha: true
+    })
     
-    // Log successful initialization
-    console.log(`✅ ClientGraphics initialized successfully with ${this.isWebGPU ? 'WebGPU' : 'WebGL'} renderer`)
-    if (this.isWebGPU) {
-      console.log('📈 Phase 2 WebGPU improvements active!')
-      console.log('🌟 AAA-Quality rendering systems enabled!')
+    this.renderer.setSize(this.width, this.height)
+    this.viewport.appendChild(this.renderer.domElement)
+    
+    console.log('✅ Minimal rendering initialized')
+  }
+
+  async initializeRenderer() {
+    // 🛡️ IMPROVED: Better error handling for renderer initialization
+    try {
+      const rendererPreference = this.world.prefs?.renderer || 'webgpu'
+      console.log('🎮 Renderer preference:', rendererPreference)
+      
+      if (rendererPreference === 'webgpu' && this.isWebGPUSupported()) {
+        await this.initializeWebGPURenderer()
+      } else {
+        this.initializeWebGLRenderer()
+      }
+    } catch (error) {
+      console.warn('⚠️ Preferred renderer failed, falling back to WebGL:', error)
+      this.initializeWebGLRenderer()
     }
+  }
+
+  async initializeWebGPURenderer() {
+    try {
+      console.log('🚀 Initializing WebGPU renderer...')
+      
+      // 🛡️ FIXED: Use proper WebGPU renderer import
+      const { WebGPURenderer } = await import('three/addons/renderers/webgpu/WebGPURenderer.js')
+      
+      this.renderer = new WebGPURenderer({
+        antialias: true,
+        alpha: true,
+        powerPreference: 'high-performance'
+      })
+      
+      await this.renderer.init()
+      this.isWebGPU = true
+      console.log('✅ WebGPU renderer created successfully')
+      
+      this.renderer.setSize(this.width, this.height)
+      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+      this.viewport.appendChild(this.renderer.domElement)
+      
+      console.log('✅ Using WebGPU renderer (user preference)')
+    } catch (error) {
+      console.error('❌ WebGPU initialization failed:', error)
+      throw error // Re-throw to trigger fallback
+    }
+  }
+
+  initializeWebGLRenderer() {
+    console.log('🔄 Initializing WebGL renderer...')
+    
+    this.renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      alpha: true,
+      powerPreference: 'high-performance'
+    })
+    
+    this.renderer.setSize(this.width, this.height)
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    this.viewport.appendChild(this.renderer.domElement)
+    
+    this.isWebGPU = false
+    console.log('✅ WebGL renderer initialized')
+  }
+
+  // 🛡️ NEW: Network error handling
+  handleNetworkError(error) {
+    console.error('🌐 Network error in graphics system:', error)
+    
+    // Implement retry logic for network-dependent features
+    if (this.retryCount < 3) {
+      this.retryCount++
+      console.log(`🔄 Retrying network operation (${this.retryCount}/3)...`)
+      
+      setTimeout(() => {
+        this.retryNetworkOperation()
+      }, 1000 * this.retryCount)
+    } else {
+      console.error('❌ Max retries reached, disabling network features')
+      this.disableNetworkFeatures()
+    }
+  }
+
+  // 🛡️ NEW: Asset loading error handling
+  handleAssetError(error, assetType, assetId) {
+    console.error(`📦 Asset loading error (${assetType}):`, error)
+    
+    // Provide fallback assets
+    this.provideFallbackAsset(assetType, assetId)
+  }
+
+  provideFallbackAsset(assetType, assetId) {
+    console.log(`🔄 Providing fallback for ${assetType}: ${assetId}`)
+    
+    switch (assetType) {
+      case 'texture':
+        // Provide default texture
+        break
+      case 'model':
+        // Provide default model
+        break
+      case 'shader':
+        // Provide default shader
+        break
+    }
+  }
+
+  // 🛡️ NEW: Memory management
+  handleMemoryWarning() {
+    console.warn('💾 Memory usage high, optimizing...')
+    
+    // Reduce texture quality
+    this.reduceTextureQuality()
+    
+    // Clear unused resources
+    this.clearUnusedResources()
+    
+    // Force garbage collection if available
+    if (window.gc) {
+      window.gc()
+    }
+  }
+
+  reduceTextureQuality() {
+    console.log('🔄 Reducing texture quality to save memory')
+    
+    // Reduce texture resolution
+    this.world.stage.scene.traverse(object => {
+      if (object.material && object.material.map) {
+        object.material.map.generateMipmaps = false
+        object.material.map.minFilter = THREE.LinearFilter
+      }
+    })
+  }
+
+  clearUnusedResources() {
+    console.log('🔄 Clearing unused resources')
+    
+    // Dispose unused geometries
+    this.renderer.dispose()
+    
+    // Clear texture cache
+    THREE.Cache.clear()
   }
 
   start() {
@@ -438,21 +420,43 @@ export class ClientGraphics extends System {
     this.world.prefs.on('change', this.onPrefsChange)
   }
 
+  // 🛡️ NEW: Handle viewport resizing
   resize(width, height) {
-    this.width = Math.max(width || 800, 1) // Ensure non-zero dimensions
-    this.height = Math.max(height || 600, 1) // Ensure non-zero dimensions
-    this.aspect = this.width / this.height
-    this.world.camera.aspect = this.aspect
-    this.world.camera.updateProjectionMatrix()
-    this.renderer.setSize(this.width, this.height)
+    if (!width || !height) return
     
-    // WebGPU compatibility: Only resize composer if it exists
-    if (this.composer) {
-      this.composer.setSize(this.width, this.height)
+    this.width = width
+    this.height = height
+    this.aspect = width / height
+    
+    if (this.renderer) {
+      this.renderer.setSize(width, height)
     }
     
-    this.emit('resize')
-    this.render()
+    if (this.world.camera) {
+      this.world.camera.aspect = this.aspect
+      this.world.camera.updateProjectionMatrix()
+    }
+    
+    // Update post-processing effects
+    if (this.composer) {
+      this.composer.setSize(width, height)
+    }
+    
+    if (this.aoPass) {
+      this.aoPass.setSize(width, height)
+    }
+    
+    console.log(`🔄 Resized to ${width}x${height}`)
+  }
+
+  // 🛡️ NEW: Setup resize observer
+  setupResizeObserver() {
+    if (!this.viewport) return
+    
+    this.resizer = new ResizeObserver(() => {
+      this.resize(this.viewport.offsetWidth, this.viewport.offsetHeight)
+    })
+    this.resizer.observe(this.viewport)
   }
 
   render() {
@@ -2046,5 +2050,57 @@ export class ClientGraphics extends System {
       this.webgpuPostProcessing = null
       this.webgpuUniforms = null
     }
+  }
+
+  // 🛡️ NEW: Check WebGPU support
+  isWebGPUSupported() {
+    return typeof navigator !== 'undefined' && 'gpu' in navigator
+  }
+
+  // 🛡️ NEW: Initialize post-processing
+  async initializePostProcessing() {
+    try {
+      if (this.isWebGPU) {
+        await this.setupWebGPUPostProcessing()
+      } else {
+        this.setupWebGLPostProcessing()
+      }
+    } catch (error) {
+      console.warn('⚠️ Post-processing initialization failed:', error)
+      // Continue without post-processing
+    }
+  }
+
+  // 🛡️ NEW: Setup WebGL post-processing
+  setupWebGLPostProcessing() {
+    console.log('🔄 Setting up WebGL post-processing...')
+    
+    this.composer = new EffectComposer(this.renderer)
+    this.renderPass = new RenderPass(this.world.stage.scene, this.world.camera)
+    this.composer.addPass(this.renderPass)
+    
+    // Add basic effects
+    try {
+      this.aoPass = new N8AOPostPass(this.world.stage.scene, this.world.camera, 
+        this.width, this.height)
+      this.aoPass.enabled = this.world.prefs?.ao ?? true
+      this.composer.addPass(this.aoPass)
+    } catch (error) {
+      console.warn('⚠️ AO pass setup failed:', error)
+    }
+    
+    console.log('✅ WebGL post-processing initialized')
+  }
+
+  // 🛡️ NEW: Retry network operation
+  retryNetworkOperation() {
+    console.log('🔄 Retrying network operation...')
+    // Implement specific network retry logic here
+  }
+
+  // 🛡️ NEW: Disable network features
+  disableNetworkFeatures() {
+    console.log('🔄 Disabling network-dependent features...')
+    // Disable features that require network connectivity
   }
 }

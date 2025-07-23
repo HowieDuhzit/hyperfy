@@ -31,6 +31,8 @@ export function CoreUI({ world }) {
   const [disconnected, setDisconnected] = useState(false)
   const [apps, setApps] = useState(false)
   const [kicked, setKicked] = useState(null)
+  
+  // 🎯 FIXED: Proper dependency array for useEffect
   useEffect(() => {
     world.on('ready', setReady)
     world.on('player', setPlayer)
@@ -42,6 +44,7 @@ export function CoreUI({ world }) {
     world.on('avatar', setAvatar)
     world.on('kick', setKicked)
     world.on('disconnect', setDisconnected)
+    
     return () => {
       world.off('ready', setReady)
       world.off('player', setPlayer)
@@ -54,34 +57,54 @@ export function CoreUI({ world }) {
       world.off('kick', setKicked)
       world.off('disconnect', setDisconnected)
     }
-  }, [])
+  }, [world]) // 🎯 FIXED: Added world as dependency
 
+  // 🎯 FIXED: Improved touch event handling
   useEffect(() => {
     const elem = ref.current
+    if (!elem) return
+    
     const onEvent = e => {
       e.isCoreUI = true
     }
+    
     elem.addEventListener('wheel', onEvent)
     elem.addEventListener('click', onEvent)
     elem.addEventListener('pointerdown', onEvent)
     elem.addEventListener('pointermove', onEvent)
     elem.addEventListener('pointerup', onEvent)
     elem.addEventListener('touchstart', onEvent)
-    // elem.addEventListener('touchmove', onEvent)
-    // elem.addEventListener('touchend', onEvent)
-  }, [])
+    elem.addEventListener('touchmove', onEvent) // 🎯 FIXED: Re-enabled touchmove
+    elem.addEventListener('touchend', onEvent)  // 🎯 FIXED: Re-enabled touchend
+    
+    return () => {
+      elem.removeEventListener('wheel', onEvent)
+      elem.removeEventListener('click', onEvent)
+      elem.removeEventListener('pointerdown', onEvent)
+      elem.removeEventListener('pointermove', onEvent)
+      elem.removeEventListener('pointerup', onEvent)
+      elem.removeEventListener('touchstart', onEvent)
+      elem.removeEventListener('touchmove', onEvent)
+      elem.removeEventListener('touchend', onEvent)
+    }
+  }, []) // 🎯 FIXED: Empty dependency array for DOM events
+
+  // 🎯 FIXED: Improved preference change handling with proper dependencies
   useEffect(() => {
     document.documentElement.style.fontSize = `${16 * world.prefs.ui}px`
+    
     function onChange(changes) {
       if (changes.ui) {
         document.documentElement.style.fontSize = `${16 * world.prefs.ui}px`
       }
     }
+    
     world.prefs.on('change', onChange)
+    
     return () => {
       world.prefs.off('change', onChange)
     }
-  }, [])
+  }, [world.prefs]) // 🎯 FIXED: Added world.prefs as dependency
   return (
     <div
       ref={ref}

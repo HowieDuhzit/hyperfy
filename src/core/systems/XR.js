@@ -50,6 +50,22 @@ export class XR extends System {
       droppedFrames: 0,
       adaptivePerformance: true
     }
+
+    // VR Controller UI Interaction System
+    this.controllerStates = {
+      left: {
+        triggerPressed: false,
+        primaryPressed: false,
+        secondaryPressed: false,
+        stickPressed: false
+      },
+      right: {
+        triggerPressed: false,
+        primaryPressed: false,
+        secondaryPressed: false,
+        stickPressed: false
+      }
+    }
   }
 
   async init() {
@@ -169,6 +185,9 @@ export class XR extends System {
     this.session = session
     this.camera = this.world.graphics.renderer.xr.getCamera()
     this.world.emit('xrSession', session)
+
+    // 🎮 NEW: Initialize controller states for UI interaction
+    this.initializeControllerStates()
 
     // Initialize controllers
     this.setupControllers()
@@ -351,17 +370,24 @@ export class XR extends System {
 
   update(delta) {
     if (!this.session) return
-    
+
     // Update light estimation
     if (this.lightEstimationEnabled) {
       this.updateLightEstimation()
     }
-    
+
     // Update hand tracking
     if (this.supportsHandTracking) {
       this.updateHandTracking()
     }
-    
+
+    // 🎮 NEW: Handle VR controller input for UI interaction
+    if (this.session.inputSources) {
+      this.session.inputSources.forEach(inputSource => {
+        this.handleControllerInput(this.world.graphics.renderer.xr.getFrame(), inputSource)
+      })
+    }
+
     // Update performance metrics
     this.updatePerformanceMetrics()
   }
@@ -396,6 +422,136 @@ export class XR extends System {
   updateHandTracking() {
     // Update hand joint positions if hand tracking is active
     // Implementation would depend on specific XR runtime capabilities
+  }
+
+  // 🎮 NEW: VR Controller UI Interaction System
+  handleControllerInput(frame, inputSource) {
+    if (!this.session || !inputSource) return
+
+    const handedness = inputSource.handedness
+    const gamepad = inputSource.gamepad
+    
+    if (!gamepad) return
+
+    // Map controller buttons to UI actions
+    this.mapControllerToUI(handedness, gamepad, frame)
+    
+    // Handle controller ray casting for UI interaction
+    this.handleControllerRaycasting(frame, inputSource)
+  }
+
+  mapControllerToUI(handedness, gamepad, frame) {
+    // Primary trigger (button 0) - UI selection/click
+    if (gamepad.buttons[0]?.pressed && !this.controllerStates[handedness]?.triggerPressed) {
+      this.controllerStates[handedness] = { ...this.controllerStates[handedness], triggerPressed: true }
+      this.handleUIClick(handedness, 'trigger')
+    } else if (!gamepad.buttons[0]?.pressed && this.controllerStates[handedness]?.triggerPressed) {
+      this.controllerStates[handedness] = { ...this.controllerStates[handedness], triggerPressed: false }
+    }
+
+    // Primary button (button 4) - Menu toggle
+    if (gamepad.buttons[4]?.pressed && !this.controllerStates[handedness]?.primaryPressed) {
+      this.controllerStates[handedness] = { ...this.controllerStates[handedness], primaryPressed: true }
+      this.handleUIClick(handedness, 'primary')
+    } else if (!gamepad.buttons[4]?.pressed && this.controllerStates[handedness]?.primaryPressed) {
+      this.controllerStates[handedness] = { ...this.controllerStates[handedness], primaryPressed: false }
+    }
+
+    // Secondary button (button 5) - Back/escape
+    if (gamepad.buttons[5]?.pressed && !this.controllerStates[handedness]?.secondaryPressed) {
+      this.controllerStates[handedness] = { ...this.controllerStates[handedness], secondaryPressed: true }
+      this.handleUIClick(handedness, 'secondary')
+    } else if (!gamepad.buttons[5]?.pressed && this.controllerStates[handedness]?.secondaryPressed) {
+      this.controllerStates[handedness] = { ...this.controllerStates[handedness], secondaryPressed: false }
+    }
+
+    // Thumbstick (axes 2,3) - UI navigation
+    const stickX = gamepad.axes[2] || 0
+    const stickY = gamepad.axes[3] || 0
+    
+    if (Math.abs(stickX) > 0.5 || Math.abs(stickY) > 0.5) {
+      this.handleUINavigation(handedness, stickX, stickY)
+    }
+  }
+
+  handleUIClick(handedness, button) {
+    console.log(`🎮 VR Controller ${handedness} ${button} button pressed`)
+    
+    switch (button) {
+      case 'trigger':
+        // Primary interaction - equivalent to mouse click
+        this.world.ui.handleVRClick(handedness, 'primary')
+        break
+      case 'primary':
+        // Menu toggle - equivalent to ESC key
+        this.world.ui.handleEscape()
+        break
+      case 'secondary':
+        // Back/escape - close current menu
+        this.world.ui.handleEscape()
+        break
+    }
+  }
+
+  handleUINavigation(handedness, x, y) {
+    // Navigate UI elements with thumbstick
+    this.world.ui.handleVRNavigation(handedness, x, y)
+  }
+
+  handleControllerRaycasting(frame, inputSource) {
+    if (!inputSource.targetRaySpace) return
+
+    // Get controller pose
+    const pose = frame.getPose(inputSource.targetRaySpace, this.world.stage.scene)
+    if (!pose) return
+
+    // Create ray from controller
+    const rayOrigin = new THREE.Vector3()
+    const rayDirection = new THREE.Vector3(0, 0, -1)
+    
+    rayOrigin.setFromMatrixPosition(pose.transform.matrix)
+    rayDirection.setFromMatrixColumn(pose.transform.matrix, 2)
+    rayDirection.multiplyScalar(-1)
+
+    // Raycast for UI elements
+    this.raycastForUI(rayOrigin, rayDirection, inputSource.handedness)
+  }
+
+  raycastForUI(rayOrigin, rayDirection, handedness) {
+    // Raycast against UI elements in 3D space
+    const raycaster = new THREE.Raycaster(rayOrigin, rayDirection)
+    
+    // Get UI elements that can be interacted with
+    const uiElements = this.world.stage.scene.children.filter(child => 
+      child.userData?.isUI && child.userData?.interactive
+    )
+
+    const intersects = raycaster.intersectObjects(uiElements, true)
+    
+    if (intersects.length > 0) {
+      const hitElement = intersects[0].object
+      this.world.ui.handleVRHover(hitElement, handedness)
+    } else {
+      this.world.ui.handleVRHover(null, handedness)
+    }
+  }
+
+  // Initialize controller states
+  initializeControllerStates() {
+    this.controllerStates = {
+      left: {
+        triggerPressed: false,
+        primaryPressed: false,
+        secondaryPressed: false,
+        stickPressed: false
+      },
+      right: {
+        triggerPressed: false,
+        primaryPressed: false,
+        secondaryPressed: false,
+        stickPressed: false
+      }
+    }
   }
 
   updatePerformanceMetrics() {

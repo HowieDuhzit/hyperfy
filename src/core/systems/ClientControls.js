@@ -592,15 +592,28 @@ export class ClientControls extends System {
   onTouchStart = e => {
     if (e.isCoreUI) return
     e.preventDefault()
+    e.stopPropagation()
+    
+    // 🎯 IMPROVED: Better touch responsiveness
     for (let i = 0; i < e.changedTouches.length; i++) {
       const touch = e.changedTouches[i]
+      const rect = this.viewport.getBoundingClientRect()
+      const offsetX = touch.clientX - rect.left
+      const offsetY = touch.clientY - rect.top
+      
       const info = {
         id: touch.identifier,
-        position: new THREE.Vector3(touch.clientX, touch.clientY, 0),
-        prevPosition: new THREE.Vector3(touch.clientX, touch.clientY, 0),
+        position: new THREE.Vector3(offsetX, offsetY, 0),
+        prevPosition: new THREE.Vector3(offsetX, offsetY, 0),
         delta: new THREE.Vector3(),
+        startTime: performance.now(),
+        isActive: true
       }
       this.touches.set(info.id, info)
+      
+      // 🎯 NEW: Immediate touch response for UI elements
+      this.handleImmediateTouchResponse(info)
+      
       for (const control of this.controls) {
         const consume = control.options.onTouch?.(info)
         if (consume) break
@@ -610,32 +623,120 @@ export class ClientControls extends System {
 
   onTouchMove = e => {
     if (e.isCoreUI) return
+    e.preventDefault()
+    e.stopPropagation()
+    
+    // 🎯 IMPROVED: Smoother touch movement
     for (let i = 0; i < e.changedTouches.length; i++) {
       const touch = e.changedTouches[i]
       const info = this.touches.get(touch.identifier)
       if (!info) continue
-      const currentX = touch.clientX
-      const currentY = touch.clientY
-      info.delta.x += currentX - info.prevPosition.x
-      info.delta.y += currentY - info.prevPosition.y
+      
+      const rect = this.viewport.getBoundingClientRect()
+      const currentX = touch.clientX - rect.left
+      const currentY = touch.clientY - rect.top
+      
+      // 🎯 NEW: Improved delta calculation with smoothing
+      const deltaX = currentX - info.prevPosition.x
+      const deltaY = currentY - info.prevPosition.y
+      
+      // Apply smoothing to reduce jitter
+      const smoothingFactor = 0.8
+      info.delta.x = info.delta.x * smoothingFactor + deltaX * (1 - smoothingFactor)
+      info.delta.y = info.delta.y * smoothingFactor + deltaY * (1 - smoothingFactor)
+      
       info.position.x = currentX
       info.position.y = currentY
       info.prevPosition.x = currentX
       info.prevPosition.y = currentY
+      
+      // 🎯 NEW: Continuous touch feedback
+      this.handleContinuousTouchResponse(info)
     }
   }
 
   onTouchEnd = e => {
     if (e.isCoreUI) return
+    e.preventDefault()
+    e.stopPropagation()
+    
+    // 🎯 IMPROVED: Better touch end handling
     for (let i = 0; i < e.changedTouches.length; i++) {
       const touch = e.changedTouches[i]
       const info = this.touches.get(touch.identifier)
+      if (!info) continue
+      
+      // 🎯 NEW: Touch completion feedback
+      info.isActive = false
+      info.endTime = performance.now()
+      info.duration = info.endTime - info.startTime
+      
+      // Handle tap vs drag detection
+      const isTap = info.duration < 300 && info.delta.length() < 10
+      if (isTap) {
+        this.handleTapGesture(info)
+      }
+      
       for (const control of this.controls) {
         const consume = control.options.onTouchEnd?.(info)
         if (consume) break
       }
       this.touches.delete(touch.identifier)
     }
+  }
+
+  // 🎯 NEW: Immediate touch response for better responsiveness
+  handleImmediateTouchResponse(touchInfo) {
+    // Provide immediate visual feedback
+    this.world.emit('touchStart', touchInfo)
+    
+    // Check for UI elements at touch position
+    const uiElement = this.findUIElementAtPosition(touchInfo.position.x, touchInfo.position.y)
+    if (uiElement) {
+      uiElement.dispatchEvent(new CustomEvent('touchstart', { 
+        bubbles: true, 
+        detail: touchInfo 
+      }))
+    }
+  }
+
+  // 🎯 NEW: Continuous touch response for smooth interaction
+  handleContinuousTouchResponse(touchInfo) {
+    this.world.emit('touchMove', touchInfo)
+    
+    // Update UI elements during touch movement
+    const uiElement = this.findUIElementAtPosition(touchInfo.position.x, touchInfo.position.y)
+    if (uiElement) {
+      uiElement.dispatchEvent(new CustomEvent('touchmove', { 
+        bubbles: true, 
+        detail: touchInfo 
+      }))
+    }
+  }
+
+  // 🎯 NEW: Tap gesture detection
+  handleTapGesture(touchInfo) {
+    this.world.emit('tap', touchInfo)
+    
+    // Handle tap on UI elements
+    const uiElement = this.findUIElementAtPosition(touchInfo.position.x, touchInfo.position.y)
+    if (uiElement) {
+      uiElement.dispatchEvent(new CustomEvent('tap', { 
+        bubbles: true, 
+        detail: touchInfo 
+      }))
+    }
+  }
+
+  // 🎯 NEW: Find UI elements at specific position
+  findUIElementAtPosition(x, y) {
+    // Convert touch coordinates to normalized coordinates
+    const normalizedX = x / this.screen.width
+    const normalizedY = y / this.screen.height
+    
+    // Find UI elements in the DOM that might be at this position
+    const elements = document.elementsFromPoint(x, y)
+    return elements.find(el => el.classList.contains('ui-element') || el.hasAttribute('data-ui'))
   }
 
   onResize = () => {

@@ -123,6 +123,122 @@ export class ClientUI extends System {
     this.broadcast()
   }
 
+  // 🎮 NEW: VR UI Interaction Methods
+  handleVRClick(handedness, action) {
+    console.log(`🎮 VR ${handedness} controller ${action} click`)
+    
+    // Handle VR controller clicks for UI interaction
+    switch (action) {
+      case 'primary':
+        // Primary trigger - equivalent to mouse click
+        this.handleVRPrimaryClick(handedness)
+        break
+      case 'secondary':
+        // Secondary button - equivalent to right click
+        this.handleVRSecondaryClick(handedness)
+        break
+    }
+  }
+
+  handleVRNavigation(handedness, x, y) {
+    // Handle VR controller thumbstick navigation
+    console.log(`🎮 VR ${handedness} navigation: ${x.toFixed(2)}, ${y.toFixed(2)}`)
+    
+    // Navigate UI elements based on thumbstick input
+    if (Math.abs(x) > 0.5 || Math.abs(y) > 0.5) {
+      this.navigateUIElements(handedness, x, y)
+    }
+  }
+
+  handleVRHover(element, handedness) {
+    // Handle VR controller raycast hover over UI elements
+    if (element) {
+      console.log(`🎮 VR ${handedness} hovering over:`, element.name || element.type)
+      
+      // Add hover effect to UI element
+      element.dispatchEvent(new CustomEvent('vrHover', {
+        bubbles: true,
+        detail: { handedness, element }
+      }))
+    }
+  }
+
+  handleVRPrimaryClick(handedness) {
+    // Handle primary trigger click in VR
+    if (this.state.pane || this.state.app) {
+      // If menu is open, close it
+      this.handleEscape()
+    } else {
+      // If no menu is open, open main menu
+      this.state.pane = 'prefs'
+      this.state.active = true
+      this.broadcast()
+    }
+  }
+
+  handleVRSecondaryClick(handedness) {
+    // Handle secondary button click in VR
+    this.handleEscape()
+  }
+
+  navigateUIElements(handedness, x, y) {
+    // Navigate through UI elements using thumbstick
+    const currentElement = this.getCurrentUIElement()
+    if (!currentElement) return
+
+    // Find next/previous element based on thumbstick direction
+    const nextElement = this.findNextUIElement(currentElement, x, y)
+    if (nextElement) {
+      this.focusUIElement(nextElement)
+    }
+  }
+
+  getCurrentUIElement() {
+    // Get currently focused UI element
+    return document.activeElement
+  }
+
+  findNextUIElement(currentElement, x, y) {
+    // Find next UI element based on navigation direction
+    const uiElements = document.querySelectorAll('[data-ui], .ui-element')
+    const currentIndex = Array.from(uiElements).indexOf(currentElement)
+    
+    if (currentIndex === -1) return uiElements[0]
+    
+    let nextIndex = currentIndex
+    
+    if (Math.abs(x) > Math.abs(y)) {
+      // Horizontal navigation
+      if (x > 0) {
+        nextIndex = (currentIndex + 1) % uiElements.length
+      } else {
+        nextIndex = currentIndex === 0 ? uiElements.length - 1 : currentIndex - 1
+      }
+    } else {
+      // Vertical navigation
+      if (y > 0) {
+        nextIndex = (currentIndex + 1) % uiElements.length
+      } else {
+        nextIndex = currentIndex === 0 ? uiElements.length - 1 : currentIndex - 1
+      }
+    }
+    
+    return uiElements[nextIndex]
+  }
+
+  focusUIElement(element) {
+    // Focus a UI element
+    if (element && element.focus) {
+      element.focus()
+      
+      // Add visual feedback for VR focus
+      element.dispatchEvent(new CustomEvent('vrFocus', {
+        bubbles: true,
+        detail: { element }
+      }))
+    }
+  }
+
   broadcast() {
     this.world.emit('ui', { ...this.state })
   }
