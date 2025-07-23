@@ -340,9 +340,11 @@ export class Apps extends System {
           }
         }
         
-        // apply any initial values
         const props = entity.blueprint.props
         for (const field of entity.fields) {
+          // apply file shortcuts
+          fileRemaps[field.type]?.(field)
+          // apply any initial values
           if (field.initial !== undefined && props[field.key] === undefined) {
             props[field.key] = field.initial
           }
