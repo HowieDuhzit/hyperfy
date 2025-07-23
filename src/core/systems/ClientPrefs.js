@@ -56,6 +56,45 @@ export class ClientPrefs extends System {
       data.brightness = null
       data.contrast = null
     }
+    
+    // v7: add AAA WebGPU advanced features
+    if (data.v < 7) {
+      data.v = 7
+      // Advanced Materials
+      data.materialQuality = null
+      data.proceduralMaterials = null
+      data.dynamicMaterialLOD = null
+      data.materialBatching = null
+      
+      // Advanced Shadows  
+      data.cascadedShadowMaps = null
+      data.volumetricShadows = null
+      data.contactShadows = null
+      data.temporalShadowFiltering = null
+      data.variableRateShadows = null
+      data.shadowAtlasQuality = null
+      
+      // Advanced Post-Processing
+      data.ssgi = null
+      data.taa = null
+      data.temporalUpsampling = null
+      
+      // GPU Profiler & Performance
+      data.gpuProfilerOverlay = null
+      data.autoOptimization = null
+      data.performanceWarnings = null
+      data.thermalThrottlingDetection = null
+      
+      // Compute Shaders
+      data.gpuDrivenCulling = null
+      data.gpuParticleSimulation = null
+      data.gpuLODSelection = null
+      
+      // Ray Tracing (Future)
+      data.rayTracedReflections = null
+      data.rayTracedGlobalIllumination = null
+      data.rayTracedShadows = null
+    }
 
     // Basic settings
     this.ui = isNumber(data.ui) ? data.ui : isTouch ? 0.9 : 1
@@ -89,6 +128,7 @@ export class ClientPrefs extends System {
     // Performance settings
     this.vsync = isBoolean(data.vsync) ? data.vsync : true
     this.frameRateLimit = data.frameRateLimit ? data.frameRateLimit : 'unlimited' // 30, 60, 120, 144, unlimited
+    this.resolutionScale = isNumber(data.resolutionScale) ? data.resolutionScale : 1.0 // 0.5-2.0 for performance scaling
     
     // Tone mapping settings
     this.toneMappingMode = data.toneMappingMode ? data.toneMappingMode : 'aces' // none, linear, reinhard, cineon, aces
@@ -98,6 +138,43 @@ export class ClientPrefs extends System {
     this.music = isNumber(data.music) ? data.music : 1
     this.sfx = isNumber(data.sfx) ? data.sfx : 1
     this.voice = isNumber(data.voice) ? data.voice : 1
+    
+    // AAA WebGPU Advanced Features
+    // Advanced Materials
+    this.materialQuality = data.materialQuality ? data.materialQuality : 'enhanced' // standard, enhanced, aaa, ultra
+    this.proceduralMaterials = isBoolean(data.proceduralMaterials) ? data.proceduralMaterials : true
+    this.dynamicMaterialLOD = isBoolean(data.dynamicMaterialLOD) ? data.dynamicMaterialLOD : true
+    this.materialBatching = isBoolean(data.materialBatching) ? data.materialBatching : true
+    
+    // Advanced Shadows
+    this.cascadedShadowMaps = isBoolean(data.cascadedShadowMaps) ? data.cascadedShadowMaps : true
+    this.volumetricShadows = isBoolean(data.volumetricShadows) ? data.volumetricShadows : false
+    this.contactShadows = isBoolean(data.contactShadows) ? data.contactShadows : true
+    this.temporalShadowFiltering = isBoolean(data.temporalShadowFiltering) ? data.temporalShadowFiltering : true
+    this.variableRateShadows = isBoolean(data.variableRateShadows) ? data.variableRateShadows : true
+    this.shadowAtlasQuality = data.shadowAtlasQuality ? data.shadowAtlasQuality : 'high' // low, medium, high, ultra
+    
+    // Advanced Post-Processing
+    this.ssgi = isBoolean(data.ssgi) ? data.ssgi : false // Screen Space Global Illumination
+    this.taa = isBoolean(data.taa) ? data.taa : true // Temporal Anti-Aliasing
+    this.temporalUpsampling = isBoolean(data.temporalUpsampling) ? data.temporalUpsampling : false // DLSS-like
+    
+    // GPU Profiler & Performance
+    this.gpuProfilerOverlay = isBoolean(data.gpuProfilerOverlay) ? data.gpuProfilerOverlay : false
+    this.autoOptimization = isBoolean(data.autoOptimization) ? data.autoOptimization : true
+    this.performanceWarnings = isBoolean(data.performanceWarnings) ? data.performanceWarnings : true
+    this.thermalThrottlingDetection = isBoolean(data.thermalThrottlingDetection) ? data.thermalThrottlingDetection : true
+    
+    // Compute Shaders (GPU-Driven)
+    this.gpuDrivenCulling = isBoolean(data.gpuDrivenCulling) ? data.gpuDrivenCulling : true
+    this.gpuParticleSimulation = isBoolean(data.gpuParticleSimulation) ? data.gpuParticleSimulation : true
+    this.gpuLODSelection = isBoolean(data.gpuLODSelection) ? data.gpuLODSelection : true
+    
+    // Ray Tracing (Future Features)
+    this.rayTracedReflections = isBoolean(data.rayTracedReflections) ? data.rayTracedReflections : false
+    this.rayTracedGlobalIllumination = isBoolean(data.rayTracedGlobalIllumination) ? data.rayTracedGlobalIllumination : false
+    this.rayTracedShadows = isBoolean(data.rayTracedShadows) ? data.rayTracedShadows : false
+    
     this.v = data.v
 
     this.changes = null
@@ -155,6 +232,7 @@ export class ClientPrefs extends System {
       // Performance settings
       vsync: this.vsync,
       frameRateLimit: this.frameRateLimit,
+      resolutionScale: this.resolutionScale,
       
       // Tone mapping settings
       toneMappingMode: this.toneMappingMode,
@@ -164,6 +242,43 @@ export class ClientPrefs extends System {
       music: this.music,
       sfx: this.sfx,
       voice: this.voice,
+      
+      // AAA WebGPU Advanced Features
+      // Advanced Materials
+      materialQuality: this.materialQuality,
+      proceduralMaterials: this.proceduralMaterials,
+      dynamicMaterialLOD: this.dynamicMaterialLOD,
+      materialBatching: this.materialBatching,
+      
+      // Advanced Shadows
+      cascadedShadowMaps: this.cascadedShadowMaps,
+      volumetricShadows: this.volumetricShadows,
+      contactShadows: this.contactShadows,
+      temporalShadowFiltering: this.temporalShadowFiltering,
+      variableRateShadows: this.variableRateShadows,
+      shadowAtlasQuality: this.shadowAtlasQuality,
+      
+      // Advanced Post-Processing
+      ssgi: this.ssgi,
+      taa: this.taa,
+      temporalUpsampling: this.temporalUpsampling,
+      
+      // GPU Profiler & Performance
+      gpuProfilerOverlay: this.gpuProfilerOverlay,
+      autoOptimization: this.autoOptimization,
+      performanceWarnings: this.performanceWarnings,
+      thermalThrottlingDetection: this.thermalThrottlingDetection,
+      
+      // Compute Shaders (GPU-Driven)
+      gpuDrivenCulling: this.gpuDrivenCulling,
+      gpuParticleSimulation: this.gpuParticleSimulation,
+      gpuLODSelection: this.gpuLODSelection,
+      
+      // Ray Tracing (Future Features)
+      rayTracedReflections: this.rayTracedReflections,
+      rayTracedGlobalIllumination: this.rayTracedGlobalIllumination,
+      rayTracedShadows: this.rayTracedShadows,
+      
       v: this.v,
     })
   }
@@ -264,6 +379,10 @@ export class ClientPrefs extends System {
   setFrameRateLimit(value) {
     this.modify('frameRateLimit', value)
   }
+  
+  setResolutionScale(value) {
+    this.modify('resolutionScale', value)
+  }
 
   // Tone mapping settings
   setToneMappingMode(value) {
@@ -285,6 +404,105 @@ export class ClientPrefs extends System {
 
   setVoice(value) {
     this.modify('voice', value)
+  }
+
+  // AAA WebGPU Advanced Features
+  // Advanced Materials settings
+  setMaterialQuality(value) {
+    this.modify('materialQuality', value)
+  }
+
+  setProceduralMaterials(value) {
+    this.modify('proceduralMaterials', value)
+  }
+
+  setDynamicMaterialLOD(value) {
+    this.modify('dynamicMaterialLOD', value)
+  }
+
+  setMaterialBatching(value) {
+    this.modify('materialBatching', value)
+  }
+
+  // Advanced Shadows settings
+  setCascadedShadowMaps(value) {
+    this.modify('cascadedShadowMaps', value)
+  }
+
+  setVolumetricShadows(value) {
+    this.modify('volumetricShadows', value)
+  }
+
+  setContactShadows(value) {
+    this.modify('contactShadows', value)
+  }
+
+  setTemporalShadowFiltering(value) {
+    this.modify('temporalShadowFiltering', value)
+  }
+
+  setVariableRateShadows(value) {
+    this.modify('variableRateShadows', value)
+  }
+
+  setShadowAtlasQuality(value) {
+    this.modify('shadowAtlasQuality', value)
+  }
+
+  // Advanced Post-Processing settings
+  setSSGI(value) {
+    this.modify('ssgi', value)
+  }
+
+  setTAA(value) {
+    this.modify('taa', value)
+  }
+
+  setTemporalUpsampling(value) {
+    this.modify('temporalUpsampling', value)
+  }
+
+  // GPU Profiler & Performance settings
+  setGPUProfilerOverlay(value) {
+    this.modify('gpuProfilerOverlay', value)
+  }
+
+  setAutoOptimization(value) {
+    this.modify('autoOptimization', value)
+  }
+
+  setPerformanceWarnings(value) {
+    this.modify('performanceWarnings', value)
+  }
+
+  setThermalThrottlingDetection(value) {
+    this.modify('thermalThrottlingDetection', value)
+  }
+
+  // Compute Shaders (GPU-Driven) settings
+  setGPUDrivenCulling(value) {
+    this.modify('gpuDrivenCulling', value)
+  }
+
+  setGPUParticleSimulation(value) {
+    this.modify('gpuParticleSimulation', value)
+  }
+
+  setGPULODSelection(value) {
+    this.modify('gpuLODSelection', value)
+  }
+
+  // Ray Tracing (Future Features) settings
+  setRayTracedReflections(value) {
+    this.modify('rayTracedReflections', value)
+  }
+
+  setRayTracedGlobalIllumination(value) {
+    this.modify('rayTracedGlobalIllumination', value)
+  }
+
+  setRayTracedShadows(value) {
+    this.modify('rayTracedShadows', value)
   }
 
   destroy() {

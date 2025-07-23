@@ -73,6 +73,21 @@ const toneMappingOptions = [
   { label: 'ACES Filmic', value: 'aces' },
 ]
 
+// AAA Advanced Feature Options
+const materialQualityOptions = [
+  { label: 'Standard', value: 'standard' },
+  { label: 'Enhanced', value: 'enhanced' },
+  { label: 'AAA Quality', value: 'aaa' },
+  { label: 'Ultra Premium', value: 'ultra' },
+]
+
+const shadowAtlasQualityOptions = [
+  { label: 'Low (1024px)', value: 'low' },
+  { label: 'Medium (2048px)', value: 'medium' },
+  { label: 'High (4096px)', value: 'high' },
+  { label: 'Ultra (8192px)', value: 'ultra' },
+]
+
 function MenuMainIndex({ world, pop, push }) {
   const { isAdmin, isBuilder } = usePermissions(world)
   const player = world.entities.player
@@ -85,17 +100,18 @@ function MenuMainIndex({ world, pop, push }) {
   return (
     <Menu title='Menu'>
       <MenuItemText label='Name' hint='Change your display name' value={name} onChange={changeName} />
-      <MenuItemBtn label='UI' hint='Change your interface settings' onClick={() => push('ui')} nav />
-      <MenuItemBtn label='Display' hint='Screen and visual settings' onClick={() => push('display')} nav />
-      <MenuItemBtn label='Graphics' hint='Rendering and quality settings' onClick={() => push('graphics')} nav />
+      <MenuItemBtn label='Display & UI' hint='Screen, interface, and visual settings' onClick={() => push('display')} nav />
+      <MenuItemBtn label='Graphics' hint='Core rendering and quality settings' onClick={() => push('graphics')} nav />
       <MenuItemBtn label='Effects' hint='Post-processing effects' onClick={() => push('effects')} nav />
-      <MenuItemBtn label='Performance' hint='Optimization settings' onClick={() => push('performance')} nav />
-      <MenuItemBtn label='Audio' hint='Volume and sound settings' onClick={() => push('audio')} nav />
+      <MenuItemBtn label='AAA WebGPU' hint='Advanced AAA rendering features' onClick={() => push('aaa')} nav />
+      <MenuItemBtn label='Performance' hint='Optimization and profiling tools' onClick={() => push('performance')} nav />
+      <MenuItemBtn label='Audio' hint='Sound and music settings' onClick={() => push('audio')} nav />
     </Menu>
   )
 }
 
 function MenuMainDisplay({ world, pop, push }) {
+  const [ui, setUI] = useState(world.prefs.ui)
   const [dpr, setDPR] = useState(world.prefs.dpr)
   const [fieldOfView, setFieldOfView] = useState(world.prefs.fieldOfView)
   const [gamma, setGamma] = useState(world.prefs.gamma)
@@ -122,6 +138,7 @@ function MenuMainDisplay({ world, pop, push }) {
 
   useEffect(() => {
     const onChange = changes => {
+      if (changes.ui) setUI(changes.ui.value)
       if (changes.dpr) setDPR(changes.dpr.value)
       if (changes.fieldOfView) setFieldOfView(changes.fieldOfView.value)
       if (changes.gamma) setGamma(changes.gamma.value)
@@ -135,8 +152,17 @@ function MenuMainDisplay({ world, pop, push }) {
   }, [])
 
   return (
-    <Menu title='Display'>
+    <Menu title='Display & UI'>
       <MenuItemBack hint='Go back to the main menu' onClick={pop} />
+      <MenuItemRange
+        label='UI Scale'
+        hint='Adjust user interface size'
+        min={0.5}
+        max={1.5}
+        step={0.1}
+        value={ui}
+        onChange={ui => world.prefs.setUI(ui)}
+      />
       <MenuItemSwitch
         label='Resolution'
         hint='Change your display resolution scale'
@@ -215,11 +241,14 @@ function MenuMainGraphics({ world, pop, push }) {
     <Menu title='Graphics'>
       <MenuItemBack hint='Go back to the main menu' onClick={pop} />
       <MenuItemSwitch
-        label='Renderer'
-        hint='Choose graphics API backend'
+        label='Renderer ⚠️ RESTART REQUIRED'
+        hint='Choose graphics API backend (requires page refresh to take effect)'
         options={rendererOptions}
         value={renderer}
-        onChange={newRenderer => world.prefs.setRenderer(newRenderer)}
+        onChange={newRenderer => {
+          world.prefs.setRenderer(newRenderer)
+          alert('⚠️ Please refresh the page for renderer change to take effect!')
+        }}
       />
       <MenuItemSwitch
         label='Shadows'
@@ -286,6 +315,9 @@ function MenuMainEffects({ world, pop, push }) {
   const [motionBlur, setMotionBlur] = useState(world.prefs.motionBlur)
   const [ssReflections, setSSReflections] = useState(world.prefs.ssReflections)
   const [volumetricLighting, setVolumetricLighting] = useState(world.prefs.volumetricLighting)
+  const [ssgi, setSSGI] = useState(world.prefs.ssgi)
+  const [taa, setTAA] = useState(world.prefs.taa)
+  const [temporalUpsampling, setTemporalUpsampling] = useState(world.prefs.temporalUpsampling)
 
   useEffect(() => {
     const onChange = changes => {
@@ -296,6 +328,9 @@ function MenuMainEffects({ world, pop, push }) {
       if (changes.motionBlur) setMotionBlur(changes.motionBlur.value)
       if (changes.ssReflections) setSSReflections(changes.ssReflections.value)
       if (changes.volumetricLighting) setVolumetricLighting(changes.volumetricLighting.value)
+      if (changes.ssgi) setSSGI(changes.ssgi.value)
+      if (changes.taa) setTAA(changes.taa.value)
+      if (changes.temporalUpsampling) setTemporalUpsampling(changes.temporalUpsampling.value)
     }
     world.prefs.on('change', onChange)
     return () => {
@@ -303,9 +338,95 @@ function MenuMainEffects({ world, pop, push }) {
     }
   }, [])
 
+  const applyEffectPreset = (presetName) => {
+    console.log(`🎨 Applying ${presetName} effects preset...`)
+    
+    switch (presetName) {
+      case 'performance':
+        // Performance - minimal effects
+        world.prefs.setPostprocessing(true)
+        world.prefs.setBloom(false)
+        world.prefs.setAO(false)
+        world.prefs.setDepthOfField(false)
+        world.prefs.setMotionBlur(false)
+        world.prefs.setSSReflections(false)
+        world.prefs.setVolumetricLighting(false)
+        world.prefs.setSSGI(false)
+        world.prefs.setTAA(true) // Keep TAA for quality
+        world.prefs.setTemporalUpsampling(false)
+        break
+        
+      case 'balanced':
+        // Balanced - common effects
+        world.prefs.setPostprocessing(true)
+        world.prefs.setBloom(true)
+        world.prefs.setAO(true)
+        world.prefs.setDepthOfField(false)
+        world.prefs.setMotionBlur(false)
+        world.prefs.setSSReflections(true)
+        world.prefs.setVolumetricLighting(false)
+        world.prefs.setSSGI(false)
+        world.prefs.setTAA(true)
+        world.prefs.setTemporalUpsampling(false)
+        break
+        
+      case 'cinematic':
+        // Cinematic - film-like effects
+        world.prefs.setPostprocessing(true)
+        world.prefs.setBloom(true)
+        world.prefs.setAO(true)
+        world.prefs.setDepthOfField(true)
+        world.prefs.setMotionBlur(true)
+        world.prefs.setSSReflections(true)
+        world.prefs.setVolumetricLighting(true)
+        world.prefs.setSSGI(true)
+        world.prefs.setTAA(true)
+        world.prefs.setTemporalUpsampling(false)
+        break
+        
+      case 'ultra':
+        // Ultra - everything enabled
+        world.prefs.setPostprocessing(true)
+        world.prefs.setBloom(true)
+        world.prefs.setAO(true)
+        world.prefs.setDepthOfField(true)
+        world.prefs.setMotionBlur(true)
+        world.prefs.setSSReflections(true)
+        world.prefs.setVolumetricLighting(true)
+        world.prefs.setSSGI(true)
+        world.prefs.setTAA(true)
+        world.prefs.setTemporalUpsampling(true)
+        break
+    }
+  }
+
   return (
     <Menu title='Effects'>
       <MenuItemBack hint='Go back to the main menu' onClick={pop} />
+      
+      {/* Effects Presets */}
+      <MenuItemBtn label='— Effect Presets —' hint='Quick post-processing presets' disabled />
+      <MenuItemBtn 
+        label='🚀 Performance' 
+        hint='Minimal effects for maximum framerate'
+        onClick={() => applyEffectPreset('performance')}
+      />
+      <MenuItemBtn 
+        label='⚖️ Balanced' 
+        hint='Common effects with good performance'
+        onClick={() => applyEffectPreset('balanced')}
+      />
+      <MenuItemBtn 
+        label='🎬 Cinematic' 
+        hint='Film-like effects for dramatic visuals'
+        onClick={() => applyEffectPreset('cinematic')}
+      />
+      <MenuItemBtn 
+        label='🔥 Ultra' 
+        hint='All effects enabled - maximum visual impact'
+        onClick={() => applyEffectPreset('ultra')}
+      />
+      
       <MenuItemToggle
         label='Post-Processing'
         hint='Enable or disable all effects'
@@ -366,20 +487,59 @@ function MenuMainEffects({ world, pop, push }) {
             value={volumetricLighting}
             onChange={vl => world.prefs.setVolumetricLighting(vl)}
           />
+          <MenuItemToggle
+            label='SSGI (WebGPU)'
+            hint='Screen Space Global Illumination - advanced lighting'
+            trueLabel='On'
+            falseLabel='Off'
+            value={ssgi}
+            onChange={ssgi => world.prefs.setSSGI(ssgi)}
+          />
+          <MenuItemToggle
+            label='TAA (WebGPU)'
+            hint='Temporal Anti-Aliasing - high quality edge smoothing'
+            trueLabel='On'
+            falseLabel='Off'
+            value={taa}
+            onChange={taa => world.prefs.setTAA(taa)}
+          />
+          <MenuItemToggle
+            label='Temporal Upsampling'
+            hint='DLSS-like AI upsampling (Experimental)'
+            trueLabel='On'
+            falseLabel='Off'
+            value={temporalUpsampling}
+            onChange={tu => world.prefs.setTemporalUpsampling(tu)}
+          />
         </>
       )}
     </Menu>
   )
 }
 
+
 function MenuMainPerformance({ world, pop, push }) {
   const [vsync, setVSync] = useState(world.prefs.vsync)
   const [frameRateLimit, setFrameRateLimit] = useState(world.prefs.frameRateLimit)
+  const [gpuProfilerOverlay, setGPUProfilerOverlay] = useState(world.prefs.gpuProfilerOverlay)
+  const [autoOptimization, setAutoOptimization] = useState(world.prefs.autoOptimization)
+  const [performanceWarnings, setPerformanceWarnings] = useState(world.prefs.performanceWarnings)
+  const [thermalThrottlingDetection, setThermalThrottlingDetection] = useState(world.prefs.thermalThrottlingDetection)
+  const [gpuDrivenCulling, setGPUDrivenCulling] = useState(world.prefs.gpuDrivenCulling)
+  const [gpuParticleSimulation, setGPUParticleSimulation] = useState(world.prefs.gpuParticleSimulation)
+  const [gpuLODSelection, setGPULODSelection] = useState(world.prefs.gpuLODSelection)
 
   useEffect(() => {
     const onChange = changes => {
       if (changes.vsync) setVSync(changes.vsync.value)
       if (changes.frameRateLimit) setFrameRateLimit(changes.frameRateLimit.value)
+      if (changes.gpuProfilerOverlay) setGPUProfilerOverlay(changes.gpuProfilerOverlay.value)
+      if (changes.autoOptimization) setAutoOptimization(changes.autoOptimization.value)
+      if (changes.performanceWarnings) setPerformanceWarnings(changes.performanceWarnings.value)
+      if (changes.thermalThrottlingDetection) setThermalThrottlingDetection(changes.thermalThrottlingDetection.value)
+      if (changes.gpuDrivenCulling) setGPUDrivenCulling(changes.gpuDrivenCulling.value)
+      if (changes.gpuParticleSimulation) setGPUParticleSimulation(changes.gpuParticleSimulation.value)
+      if (changes.gpuLODSelection) setGPULODSelection(changes.gpuLODSelection.value)
     }
     world.prefs.on('change', onChange)
     return () => {
@@ -388,7 +548,7 @@ function MenuMainPerformance({ world, pop, push }) {
   }, [])
 
   return (
-    <Menu title='Performance'>
+    <Menu title='Performance & Profiling'>
       <MenuItemBack hint='Go back to the main menu' onClick={pop} />
       <MenuItemToggle
         label='V-Sync'
@@ -404,6 +564,335 @@ function MenuMainPerformance({ world, pop, push }) {
         options={frameRateLimitOptions}
         value={frameRateLimit}
         onChange={limit => world.prefs.setFrameRateLimit(limit)}
+      />
+      <MenuItemToggle
+        label='GPU Profiler Overlay'
+        hint='Real-time performance monitoring'
+        trueLabel='On'
+        falseLabel='Off'
+        value={gpuProfilerOverlay}
+        onChange={overlay => world.prefs.setGPUProfilerOverlay(overlay)}
+      />
+      <MenuItemToggle
+        label='Auto Optimization'
+        hint='Automatically adjust quality for performance'
+        trueLabel='On'
+        falseLabel='Off'
+        value={autoOptimization}
+        onChange={auto => world.prefs.setAutoOptimization(auto)}
+      />
+      <MenuItemToggle
+        label='Performance Warnings'
+        hint='Alerts for performance issues'
+        trueLabel='On'
+        falseLabel='Off'
+        value={performanceWarnings}
+        onChange={warnings => world.prefs.setPerformanceWarnings(warnings)}
+      />
+      <MenuItemToggle
+        label='Thermal Throttling Detection'
+        hint='Monitor device temperature impact'
+        trueLabel='On'
+        falseLabel='Off'
+        value={thermalThrottlingDetection}
+        onChange={thermal => world.prefs.setThermalThrottlingDetection(thermal)}
+      />
+      <MenuItemToggle
+        label='GPU-Driven Culling'
+        hint='GPU compute shader object culling'
+        trueLabel='On'
+        falseLabel='Off'
+        value={gpuDrivenCulling}
+        onChange={cull => world.prefs.setGPUDrivenCulling(cull)}
+      />
+      <MenuItemToggle
+        label='GPU Particle Simulation'
+        hint='Hardware-accelerated particles'
+        trueLabel='On'
+        falseLabel='Off'
+        value={gpuParticleSimulation}
+        onChange={particles => world.prefs.setGPUParticleSimulation(particles)}
+      />
+      <MenuItemToggle
+        label='GPU LOD Selection'
+        hint='GPU compute shader LOD calculation'
+        trueLabel='On'
+        falseLabel='Off'
+        value={gpuLODSelection}
+        onChange={lod => world.prefs.setGPULODSelection(lod)}
+      />
+    </Menu>
+  )
+}
+
+function MenuMainAAA({ world, pop, push }) {
+  // Materials
+  const [materialQuality, setMaterialQuality] = useState(world.prefs.materialQuality)
+  const [proceduralMaterials, setProceduralMaterials] = useState(world.prefs.proceduralMaterials)
+  const [dynamicMaterialLOD, setDynamicMaterialLOD] = useState(world.prefs.dynamicMaterialLOD)
+  const [materialBatching, setMaterialBatching] = useState(world.prefs.materialBatching)
+  
+  // Shadows
+  const [cascadedShadowMaps, setCascadedShadowMaps] = useState(world.prefs.cascadedShadowMaps)
+  const [volumetricShadows, setVolumetricShadows] = useState(world.prefs.volumetricShadows)
+  const [contactShadows, setContactShadows] = useState(world.prefs.contactShadows)
+  const [temporalShadowFiltering, setTemporalShadowFiltering] = useState(world.prefs.temporalShadowFiltering)
+  const [variableRateShadows, setVariableRateShadows] = useState(world.prefs.variableRateShadows)
+  const [shadowAtlasQuality, setShadowAtlasQuality] = useState(world.prefs.shadowAtlasQuality)
+  
+  // Ray Tracing
+  const [rayTracedReflections, setRayTracedReflections] = useState(world.prefs.rayTracedReflections)
+  const [rayTracedGlobalIllumination, setRayTracedGlobalIllumination] = useState(world.prefs.rayTracedGlobalIllumination)
+  const [rayTracedShadows, setRayTracedShadows] = useState(world.prefs.rayTracedShadows)
+
+  useEffect(() => {
+    const onChange = changes => {
+      // Materials
+      if (changes.materialQuality) setMaterialQuality(changes.materialQuality.value)
+      if (changes.proceduralMaterials) setProceduralMaterials(changes.proceduralMaterials.value)
+      if (changes.dynamicMaterialLOD) setDynamicMaterialLOD(changes.dynamicMaterialLOD.value)
+      if (changes.materialBatching) setMaterialBatching(changes.materialBatching.value)
+      
+      // Shadows
+      if (changes.cascadedShadowMaps) setCascadedShadowMaps(changes.cascadedShadowMaps.value)
+      if (changes.volumetricShadows) setVolumetricShadows(changes.volumetricShadows.value)
+      if (changes.contactShadows) setContactShadows(changes.contactShadows.value)
+      if (changes.temporalShadowFiltering) setTemporalShadowFiltering(changes.temporalShadowFiltering.value)
+      if (changes.variableRateShadows) setVariableRateShadows(changes.variableRateShadows.value)
+      if (changes.shadowAtlasQuality) setShadowAtlasQuality(changes.shadowAtlasQuality.value)
+      
+      // Ray Tracing
+      if (changes.rayTracedReflections) setRayTracedReflections(changes.rayTracedReflections.value)
+      if (changes.rayTracedGlobalIllumination) setRayTracedGlobalIllumination(changes.rayTracedGlobalIllumination.value)
+      if (changes.rayTracedShadows) setRayTracedShadows(changes.rayTracedShadows.value)
+    }
+    world.prefs.on('change', onChange)
+    return () => {
+      world.prefs.off('change', onChange)
+    }
+  }, [])
+
+  const applyPreset = (presetName) => {
+    console.log(`🎮 Applying ${presetName} preset...`)
+    
+    switch (presetName) {
+      case 'performance':
+        // Performance preset - prioritize framerate
+        world.prefs.setMaterialQuality('standard')
+        world.prefs.setProceduralMaterials(false)
+        world.prefs.setDynamicMaterialLOD(true)
+        world.prefs.setMaterialBatching(true)
+        world.prefs.setCascadedShadowMaps(false)
+        world.prefs.setVolumetricShadows(false)
+        world.prefs.setContactShadows(false)
+        world.prefs.setTemporalShadowFiltering(true)
+        world.prefs.setVariableRateShadows(true)
+        world.prefs.setShadowAtlasQuality('low')
+        world.prefs.setGPUProfilerOverlay(true)
+        world.prefs.setAutoOptimization(true)
+        world.prefs.setGPUDrivenCulling(true)
+        world.prefs.setGPUParticleSimulation(true)
+        world.prefs.setGPULODSelection(true)
+        break
+        
+      case 'balanced':
+        // Balanced preset - good quality + performance
+        world.prefs.setMaterialQuality('enhanced')
+        world.prefs.setProceduralMaterials(true)
+        world.prefs.setDynamicMaterialLOD(true)
+        world.prefs.setMaterialBatching(true)
+        world.prefs.setCascadedShadowMaps(true)
+        world.prefs.setVolumetricShadows(false)
+        world.prefs.setContactShadows(true)
+        world.prefs.setTemporalShadowFiltering(true)
+        world.prefs.setVariableRateShadows(true)
+        world.prefs.setShadowAtlasQuality('medium')
+        world.prefs.setGPUProfilerOverlay(false)
+        world.prefs.setAutoOptimization(true)
+        world.prefs.setGPUDrivenCulling(true)
+        world.prefs.setGPUParticleSimulation(true)
+        world.prefs.setGPULODSelection(true)
+        break
+        
+      case 'quality':
+        // Quality preset - maximum visual fidelity
+        world.prefs.setMaterialQuality('aaa')
+        world.prefs.setProceduralMaterials(true)
+        world.prefs.setDynamicMaterialLOD(true)
+        world.prefs.setMaterialBatching(true)
+        world.prefs.setCascadedShadowMaps(true)
+        world.prefs.setVolumetricShadows(true)
+        world.prefs.setContactShadows(true)
+        world.prefs.setTemporalShadowFiltering(true)
+        world.prefs.setVariableRateShadows(true)
+        world.prefs.setShadowAtlasQuality('high')
+        world.prefs.setGPUProfilerOverlay(false)
+        world.prefs.setAutoOptimization(false)
+        world.prefs.setGPUDrivenCulling(true)
+        world.prefs.setGPUParticleSimulation(true)
+        world.prefs.setGPULODSelection(true)
+        break
+        
+      case 'ultra':
+        // Ultra preset - ultimate realistic quality with all advanced PBR features
+        world.prefs.setMaterialQuality('ultra')
+        world.prefs.setProceduralMaterials(true)
+        world.prefs.setDynamicMaterialLOD(false) // Disable LOD for max quality
+        world.prefs.setMaterialBatching(false) // Disable batching for max quality
+        world.prefs.setCascadedShadowMaps(true)
+        world.prefs.setVolumetricShadows(true)
+        world.prefs.setContactShadows(true)
+        world.prefs.setTemporalShadowFiltering(true)
+        world.prefs.setVariableRateShadows(false) // Disable for max quality
+        world.prefs.setShadowAtlasQuality('ultra')
+        world.prefs.setGPUProfilerOverlay(false)
+        world.prefs.setAutoOptimization(false)
+        world.prefs.setGPUDrivenCulling(false) // CPU culling for max precision
+        world.prefs.setGPUParticleSimulation(true)
+        world.prefs.setGPULODSelection(false) // Disable LOD
+        break
+    }
+  }
+
+  return (
+    <Menu title='AAA WebGPU Settings'>
+      <MenuItemBack hint='Go back to the main menu' onClick={pop} />
+      
+      {/* Quality Presets */}
+      <MenuItemBtn label='— Quality Presets —' hint='Quick configuration presets' disabled />
+      <MenuItemBtn 
+        label='🚀 Performance' 
+        hint='Natural PBR materials optimized for high framerate'
+        onClick={() => applyPreset('performance')}
+      />
+      <MenuItemBtn 
+        label='⚖️ Balanced' 
+        hint='Enhanced PBR with improved reflections and surface quality'
+        onClick={() => applyPreset('balanced')}
+      />
+      <MenuItemBtn 
+        label='💎 Quality' 
+        hint='Maximum realistic PBR fidelity with advanced features'
+        onClick={() => applyPreset('quality')}
+      />
+      <MenuItemBtn 
+        label='🔥 Ultra' 
+        hint='Ultimate PBR quality with cutting-edge material features'
+        onClick={() => applyPreset('ultra')}
+      />
+      
+      {/* Advanced Materials Section */}
+      <MenuItemBtn label='— Advanced Materials —' hint='PBR materials and quality' disabled />
+      <MenuItemSwitch
+        label='Material Quality'
+        hint='Realistic PBR material enhancement level - from natural to ultimate fidelity'
+        options={materialQualityOptions}
+        value={materialQuality}
+        onChange={quality => world.prefs.setMaterialQuality(quality)}
+      />
+      <MenuItemToggle
+        label='Procedural Materials'
+        hint='AI-generated material details'
+        trueLabel='On'
+        falseLabel='Off'
+        value={proceduralMaterials}
+        onChange={proc => world.prefs.setProceduralMaterials(proc)}
+      />
+      <MenuItemToggle
+        label='Dynamic Material LOD'
+        hint='Automatic material quality scaling'
+        trueLabel='On'
+        falseLabel='Off'
+        value={dynamicMaterialLOD}
+        onChange={lod => world.prefs.setDynamicMaterialLOD(lod)}
+      />
+      <MenuItemToggle
+        label='Material Batching'
+        hint='Performance optimization for similar materials'
+        trueLabel='On'
+        falseLabel='Off'
+        value={materialBatching}
+        onChange={batch => world.prefs.setMaterialBatching(batch)}
+      />
+      
+      {/* Advanced Shadows Section */}
+      <MenuItemBtn label='— Advanced Shadows —' hint='High-quality shadow rendering' disabled />
+      <MenuItemToggle
+        label='Cascaded Shadow Maps'
+        hint='High-quality directional light shadows'
+        trueLabel='On'
+        falseLabel='Off'
+        value={cascadedShadowMaps}
+        onChange={csm => world.prefs.setCascadedShadowMaps(csm)}
+      />
+      <MenuItemToggle
+        label='Volumetric Shadows'
+        hint='Light scattering through fog and atmosphere'
+        trueLabel='On'
+        falseLabel='Off'
+        value={volumetricShadows}
+        onChange={vs => world.prefs.setVolumetricShadows(vs)}
+      />
+      <MenuItemToggle
+        label='Contact Shadows'
+        hint='Fine detail shadows for close objects'
+        trueLabel='On'
+        falseLabel='Off'
+        value={contactShadows}
+        onChange={cs => world.prefs.setContactShadows(cs)}
+      />
+      <MenuItemToggle
+        label='Temporal Shadow Filtering'
+        hint='Smooth, flicker-free shadow edges'
+        trueLabel='On'
+        falseLabel='Off'
+        value={temporalShadowFiltering}
+        onChange={tsf => world.prefs.setTemporalShadowFiltering(tsf)}
+      />
+      <MenuItemToggle
+        label='Variable Rate Shadows'
+        hint='Adaptive shadow quality based on importance'
+        trueLabel='On'
+        falseLabel='Off'
+        value={variableRateShadows}
+        onChange={vrs => world.prefs.setVariableRateShadows(vrs)}
+      />
+      <MenuItemSwitch
+        label='Shadow Atlas Quality'
+        hint='Shadow texture resolution'
+        options={shadowAtlasQualityOptions}
+        value={shadowAtlasQuality}
+        onChange={quality => world.prefs.setShadowAtlasQuality(quality)}
+      />
+      
+      {/* Ray Tracing Section */}
+      <MenuItemBtn label='— Ray Tracing (Future) —' hint='Hardware ray tracing features' disabled />
+      <MenuItemToggle
+        label='Ray Traced Reflections'
+        hint='Real-time ray traced reflections (WebGPU RT)'
+        trueLabel='On'
+        falseLabel='Off'
+        value={rayTracedReflections}
+        onChange={rtr => world.prefs.setRayTracedReflections(rtr)}
+        disabled={true}
+      />
+      <MenuItemToggle
+        label='Ray Traced Global Illumination'
+        hint='Real-time ray traced global lighting (WebGPU RT)'
+        trueLabel='On'
+        falseLabel='Off'
+        value={rayTracedGlobalIllumination}
+        onChange={rtgi => world.prefs.setRayTracedGlobalIllumination(rtgi)}
+        disabled={true}
+      />
+      <MenuItemToggle
+        label='Ray Traced Shadows'
+        hint='Hardware ray traced shadows (WebGPU RT)'
+        trueLabel='On'
+        falseLabel='Off'
+        value={rayTracedShadows}
+        onChange={rts => world.prefs.setRayTracedShadows(rts)}
+        disabled={true}
       />
     </Menu>
   )
@@ -460,14 +949,7 @@ function MenuMainAudio({ world, pop, push }) {
   )
 }
 
-function MenuMainUI({ world, pop, push }) {
-  return (
-    <Menu title='Interface'>
-      <MenuItemBack hint='Go back to the main menu' onClick={pop} />
-      <MenuItemBtn label='Coming Soon' hint='UI customization options' disabled />
-    </Menu>
-  )
-}
+
 
 function MenuMainWorld({ world, pop, push }) {
   return (
@@ -485,9 +967,6 @@ export default function MenuMain({ world, hidden, route, ...routeProps }) {
   if (!route || route === 'index') {
     return <MenuMainIndex world={world} {...routeProps} />
   }
-  if (route === 'ui') {
-    return <MenuMainUI world={world} {...routeProps} />
-  }
   if (route === 'display') {
     return <MenuMainDisplay world={world} {...routeProps} />
   }
@@ -496,6 +975,9 @@ export default function MenuMain({ world, hidden, route, ...routeProps }) {
   }
   if (route === 'effects') {
     return <MenuMainEffects world={world} {...routeProps} />
+  }
+  if (route === 'aaa') {
+    return <MenuMainAAA world={world} {...routeProps} />
   }
   if (route === 'performance') {
     return <MenuMainPerformance world={world} {...routeProps} />

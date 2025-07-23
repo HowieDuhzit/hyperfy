@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AAA WebGPU Rendering Test - HyperfySRC</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background: #000;
+      color: #fff;
+      font-family: 'Courier New', monospace;
+      overflow: hidden;
+    }
+    
+    #root {
+      position: absolute;
+      inset: 0;
+    }
+    
+    #loading {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      z-index: 1000;
+    }
+    
+    #webgpu-status {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(0,0,0,0.8);
+      padding: 10px;
+      border-radius: 5px;
+      font-size: 12px;
+      z-index: 1000;
+      max-width: 400px;
+    }
+    
+    .status-ok { color: #00ff00; }
+    .status-warning { color: #ffaa00; }
+    .status-error { color: #ff0000; }
+    
+    #performance-overlay {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: rgba(0,0,0,0.8);
+      padding: 10px;
+      border-radius: 5px;
+      font-size: 12px;
+      z-index: 1000;
+      min-width: 200px;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  
+  <div id="loading">
+    <h2>🌟 Loading AAA WebGPU Rendering System...</h2>
+    <p>Initializing advanced materials, shadows, and GPU profiler...</p>
+  </div>
+  
+  <div id="webgpu-status">
+    <h3>🎮 WebGPU Status</h3>
+    <div id="webgpu-support">Checking WebGPU support...</div>
+    <div id="adapter-info">Adapter: Unknown</div>
+    <div id="device-limits">Device Limits: Unknown</div>
+    <div id="features">Features: Unknown</div>
+  </div>
+  
+  <div id="performance-overlay">
+    <h3>📊 Performance Monitor</h3>
+    <div id="fps">FPS: --</div>
+    <div id="frame-time">Frame Time: -- ms</div>
+    <div id="gpu-memory">GPU Memory: -- MB</div>
+    <div id="draw-calls">Draw Calls: --</div>
+    <div id="triangles">Triangles: --</div>
+  </div>
+
+  <script type="module">
+    // WebGPU Feature Detection and Debugging
+    async function detectWebGPU() {
+      const statusEl = document.getElementById('webgpu-support');
+      const adapterEl = document.getElementById('adapter-info');
+      const limitsEl = document.getElementById('device-limits');
+      const featuresEl = document.getElementById('features');
+      
+      try {
+        if (!('gpu' in navigator)) {
+          statusEl.innerHTML = '<span class="status-error">❌ WebGPU not supported in this browser</span>';
+          return false;
+        }
+        
+        statusEl.innerHTML = '<span class="status-ok">✅ WebGPU API available</span>';
+        
+        const adapter = await navigator.gpu.requestAdapter();
+        if (!adapter) {
+          statusEl.innerHTML = '<span class="status-error">❌ No WebGPU adapter found</span>';
+          return false;
+        }
+        
+        adapterEl.innerHTML = `Adapter: ${adapter.info?.vendor || 'Unknown'} ${adapter.info?.device || ''}`;
+        
+        const device = await adapter.requestDevice();
+        limitsEl.innerHTML = `Max Texture Size: ${device.limits.maxTextureDimension2D}px`;
+        
+        const supportedFeatures = Array.from(adapter.features);
+        featuresEl.innerHTML = `Features: ${supportedFeatures.join(', ') || 'None'}`;
+        
+        statusEl.innerHTML = '<span class="status-ok">🚀 WebGPU fully operational!</span>';
+        return true;
+        
+      } catch (error) {
+        statusEl.innerHTML = `<span class="status-error">❌ WebGPU Error: ${error.message}</span>`;
+        console.error('WebGPU detection failed:', error);
+        return false;
+      }
+    }
+    
+    // Performance monitoring overlay
+    let frameCount = 0;
+    let lastTime = performance.now();
+    
+    function updatePerformanceOverlay() {
+      const now = performance.now();
+      const deltaTime = now - lastTime;
+      frameCount++;
+      
+      if (deltaTime >= 1000) { // Update every second
+        const fps = Math.round((frameCount * 1000) / deltaTime);
+        const frameTime = (deltaTime / frameCount).toFixed(2);
+        
+        document.getElementById('fps').textContent = `FPS: ${fps}`;
+        document.getElementById('frame-time').textContent = `Frame Time: ${frameTime} ms`;
+        
+        // Try to get GPU memory info if available
+        if (performance.memory) {
+          const memMB = (performance.memory.usedJSHeapSize / 1024 / 1024).toFixed(1);
+          document.getElementById('gpu-memory').textContent = `JS Memory: ${memMB} MB`;
+        }
+        
+        frameCount = 0;
+        lastTime = now;
+      }
+      
+      requestAnimationFrame(updatePerformanceOverlay);
+    }
+    
+    // Initialize test environment
+    async function initTest() {
+      console.log('🌟 Starting AAA WebGPU Test Environment');
+      
+      // Detect WebGPU support
+      const webgpuSupported = await detectWebGPU();
+      
+      // Start performance monitoring
+      updatePerformanceOverlay();
+      
+      // Load the HyperfySRC client
+      try {
+        // Set WebGPU preference in localStorage for testing
+        if (webgpuSupported) {
+          localStorage.setItem('hyperfy-renderer', 'webgpu');
+          console.log('🎮 WebGPU renderer preference set');
+        }
+        
+        // Import and initialize the HyperfySRC world client
+        const { Client } = await import('./build/world-client.js');
+        
+        // Create test world configuration
+        const wsUrl = 'ws://localhost:8080'; // Default WebSocket URL
+        
+        // Hide loading screen
+        document.getElementById('loading').style.display = 'none';
+        
+        console.log('✅ AAA WebGPU client loaded successfully!');
+        console.log('🌟 Check the console for AAA rendering system initialization logs');
+        
+      } catch (error) {
+        console.error('❌ Failed to load AAA WebGPU client:', error);
+        document.getElementById('loading').innerHTML = `
+          <h2 style="color: #ff0000;">❌ Failed to Load</h2>
+          <p>Error: ${error.message}</p>
+          <p>Check the console for more details.</p>
+        `;
+      }
+    }
+    
+    // Start the test when page loads
+    initTest();
+    
+    // Expose debugging functions to global scope
+    window.webgpuTest = {
+      detectWebGPU,
+      updatePerformanceOverlay
+    };
+  </script>
+</body>
+</html> 

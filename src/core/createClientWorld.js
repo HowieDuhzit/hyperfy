@@ -22,6 +22,12 @@ import { Snaps } from './systems/Snaps'
 import { Wind } from './systems/Wind'
 import { XR } from './systems/XR'
 
+// AAA-Quality Rendering Systems
+import { AdvancedMaterials } from './systems/AdvancedMaterials'
+import { AdvancedShadows } from './systems/AdvancedShadows'
+import { GPUProfiler } from './systems/GPUProfiler'
+import { InstancedMeshHelper } from './systems/InstancedMeshHelper'
+
 export function createClientWorld() {
   const world = new World()
   world.register('client', Client)
@@ -45,5 +51,12 @@ export function createClientWorld() {
   world.register('snaps', Snaps)
   world.register('wind', Wind)
   world.register('xr', XR)
+  
+  // Register AAA-Quality Rendering Systems
+  world.register('advancedMaterials', AdvancedMaterials)
+  world.register('advancedShadows', AdvancedShadows)
+  world.register('gpuProfiler', GPUProfiler)
+  world.register('instancedMeshHelper', InstancedMeshHelper)
+  
   return world
 }
