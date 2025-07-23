@@ -115,7 +115,6 @@ export class Image extends Node {
     applyPivot(geometry, width, height, this._pivot)
     
     // UNIFIED MATERIAL CREATION: Let the loader handle WebGPU compatibility
-    console.log('🖼️ Creating Image node with unified material pipeline')
     
     const uniforms = {
       uMap: { value: this.texture },
@@ -127,14 +126,13 @@ export class Image extends Node {
     }
     
     // Check renderer type for material selection
-    const renderer = this.world.graphics?.renderer
+    const renderer = this.ctx.world.graphics?.renderer
     const isWebGPU = renderer && (renderer.isWebGPURenderer || renderer.constructor.name === 'WebGPURenderer')
     
     let material
     
     if (isWebGPU) {
-      // WebGPU: Use standard materials with proper setup
-      console.log('🚀 Using WebGPU-compatible material for Image node')
+      // WebGPU: Create material with proper fit/aspect handling using texture transforms
       material = this._lit ? new THREE.MeshStandardMaterial() : new THREE.MeshBasicMaterial()
       
       if (this._lit) {
@@ -143,15 +141,60 @@ export class Image extends Node {
       }
       
       material.side = this._doubleside ? THREE.DoubleSide : THREE.FrontSide
-      material.transparent = this._color === 'transparent'
       
-      // Apply texture and color
-      if (uniforms.uMap.value) {
-        material.map = uniforms.uMap.value
+      // Apply texture - always set the texture
+      material.map = uniforms.uMap.value
+      
+      // Apply fit logic using texture repeat and offset
+      const fit = uniforms.uFit.value
+      const imgAspect = uniforms.uImgAspect.value
+      const geoAspect = uniforms.uGeoAspect.value
+      const aspect = geoAspect / imgAspect
+      
+      if (fit === 1) { // cover - fill entire geometry, may crop image
+        if (aspect > 1.0) {
+          // Geometry is wider than image - scale horizontally to fill
+          const scaleY = 1.0 / aspect
+          material.map.repeat.set(1.0, scaleY)
+          material.map.offset.set(0, (1.0 - scaleY) / 2)
+        } else {
+          // Geometry is taller than image - scale vertically to fill
+          const scaleX = aspect
+          material.map.repeat.set(scaleX, 1.0)
+          material.map.offset.set((1.0 - scaleX) / 2, 0)
+        }
+      } else if (fit === 2) { // contain - show entire image, may have empty space
+        if (aspect > 1.0) {
+          // Geometry is wider than image - fit image horizontally
+          const scaleX = aspect
+          material.map.repeat.set(scaleX, 1.0)
+          material.map.offset.set((1.0 - scaleX) / 2, 0)
+        } else {
+          // Geometry is taller than image - fit image vertically
+          const scaleY = 1.0 / aspect
+          material.map.repeat.set(1.0, scaleY)
+          material.map.offset.set(0, (1.0 - scaleY) / 2)
+        }
+      } else { // none - stretch to fill
+        material.map.repeat.set(1, 1)
+        material.map.offset.set(0, 0)
       }
       
-      if (this._color !== 'white' && this._color !== 'transparent') {
-        material.color.set(uniforms.uColor.value)
+      material.map.needsUpdate = true
+      
+      // Apply color tinting and transparency
+      if (this._color === 'transparent') {
+        // When color is 'transparent', make the entire material transparent
+        material.opacity = 0
+        material.transparent = true
+        material.color.set(0xffffff) // White base color
+      } else {
+        // For normal images, use white color to show original texture colors
+        // This avoids the black tinting issue where color='black' would make images appear black
+        material.color.set(0xffffff) // White = no tint, shows original texture
+        // Enable transparency to handle alpha channels in textures
+        material.transparent = true
+        material.alphaTest = 0.001 // Small alpha test to avoid z-fighting
       }
       
       // Apply unified material processing
@@ -159,7 +202,6 @@ export class Image extends Node {
       
     } else {
       // WebGL: Use CustomShaderMaterial for advanced features
-      console.log('🎨 Using CustomShaderMaterial for Image node (WebGL)')
       material = new CustomShaderMaterial({
         baseMaterial: this._lit ? THREE.MeshStandardMaterial : THREE.MeshBasicMaterial,
         roughness: this._lit ? 1 : undefined,

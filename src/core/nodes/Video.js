@@ -145,13 +145,13 @@ export class Video extends Node {
         uOffset: { value: new THREE.Vector2(0, 0) },
       }
       // const color = this.instance?.ready ? 'white' : this._color
-      // WebGPU compatibility: Check if WebGPU renderer is being used
-      const renderer = this.world.graphics?.renderer
-      const isWebGPU = renderer && (renderer.isWebGPURenderer || renderer.constructor.name === 'WebGPURenderer')
+             // WebGPU compatibility: Check if WebGPU renderer is being used
+       const renderer = this.ctx.world.graphics?.renderer
+       const isWebGPU = renderer && (renderer.isWebGPURenderer || renderer.constructor.name === 'WebGPURenderer')
       
       if (isWebGPU) {
-        // Use basic material for WebGPU compatibility
-        console.log('Using basic material for Video node (WebGPU compatibility)')
+        // WebGPU: Create material with proper fit/aspect handling and UV offset support
+        console.log('🚀 Using WebGPU-compatible material for Video node with fit and offset support')
         material = this._lit ? new THREE.MeshStandardMaterial() : new THREE.MeshBasicMaterial()
         
         if (this._lit) {
@@ -161,14 +161,58 @@ export class Video extends Node {
         
         material.side = this._doubleside ? THREE.DoubleSide : THREE.FrontSide
         
-        // Apply basic video texture for WebGPU
+        // Apply video texture with fit logic and offset support
         if (uniforms.uMap.value) {
           material.map = uniforms.uMap.value
+          
+          // Apply initial UV offset
+          const offsetX = uniforms.uOffset.value.x
+          const offsetY = uniforms.uOffset.value.y
+          material.map.offset.set(offsetX, offsetY)
+          
+          // Apply fit logic using texture repeat and offset
+          const fit = uniforms.uFit.value
+          const vidAspect = uniforms.uVidAspect.value
+          const geoAspect = uniforms.uGeoAspect.value
+          const aspect = geoAspect / vidAspect
+          
+          if (fit === 1) { // cover mode
+            if (aspect > 1.0) {
+              // Geometry is wider than video - scale vertically
+              const scale = 1.0 / aspect
+              material.map.repeat.set(1.0, scale)
+              material.map.offset.y += (1.0 - scale) / 2 + offsetY
+            } else {
+              // Geometry is taller than video - scale horizontally  
+              const scale = aspect
+              material.map.repeat.set(scale, 1.0)
+              material.map.offset.x += (1.0 - scale) / 2 + offsetX
+            }
+          } else if (fit === 2) { // contain mode
+            if (aspect > 1.0) {
+              // Geometry is wider than video - scale horizontally
+              const scale = aspect
+              material.map.repeat.set(scale, 1.0)
+              material.map.offset.x += (1.0 - scale) / 2 + offsetX
+            } else {
+              // Geometry is taller than video - scale vertically
+              const scale = 1.0 / aspect  
+              material.map.repeat.set(1.0, scale)
+              material.map.offset.y += (1.0 - scale) / 2 + offsetY
+            }
+          } else { // none mode
+            material.map.repeat.set(1, 1)
+            material.map.offset.set(offsetX, offsetY)
+          }
+          
+          material.map.needsUpdate = true
         }
         
+        // Apply background color for contain mode outside areas
         if (this._color !== 'white') {
           material.color.set(uniforms.uColor.value)
         }
+        
       } else {
         // Use CustomShaderMaterial for WebGL
         material = new CustomShaderMaterial({
@@ -384,11 +428,56 @@ export class Video extends Node {
       }
 
       material.color.set('white')
-      material.uniforms.uVidAspect.value = vidAspect
-      material.uniforms.uGeoAspect.value = geoAspect
-      material.uniforms.uMap.value = this.instance.texture
-      material.uniforms.uHasMap.value = 1
-      material.needsUpdate = true
+      
+             // Update material based on renderer type
+       const renderer = this.ctx.world.graphics?.renderer
+       const isWebGPU = renderer && (renderer.isWebGPURenderer || renderer.constructor.name === 'WebGPURenderer')
+      
+      if (isWebGPU) {
+        // WebGPU: Update texture and recalculate fit/offset logic
+        material.map = this.instance.texture
+        
+        // Recalculate fit logic with new video dimensions
+        const offsetX = 0 // TODO: Support dynamic offset updates
+        const offsetY = 0
+        const fit = this._fit === 'cover' ? 1 : this._fit === 'contain' ? 2 : 0
+        const aspect = geoAspect / vidAspect
+        
+        if (fit === 1) { // cover mode
+          if (aspect > 1.0) {
+            const scale = 1.0 / aspect
+            material.map.repeat.set(1.0, scale)
+            material.map.offset.set(offsetX, offsetY + (1.0 - scale) / 2)
+          } else {
+            const scale = aspect
+            material.map.repeat.set(scale, 1.0)
+            material.map.offset.set(offsetX + (1.0 - scale) / 2, offsetY)
+          }
+        } else if (fit === 2) { // contain mode
+          if (aspect > 1.0) {
+            const scale = aspect
+            material.map.repeat.set(scale, 1.0)
+            material.map.offset.set(offsetX + (1.0 - scale) / 2, offsetY)
+          } else {
+            const scale = 1.0 / aspect
+            material.map.repeat.set(1.0, scale)
+            material.map.offset.set(offsetX, offsetY + (1.0 - scale) / 2)
+          }
+        } else { // none mode
+          material.map.repeat.set(1, 1)
+          material.map.offset.set(offsetX, offsetY)
+        }
+        
+        material.map.needsUpdate = true
+        material.needsUpdate = true
+      } else {
+        // WebGL: Update uniforms as before
+        material.uniforms.uVidAspect.value = vidAspect
+        material.uniforms.uGeoAspect.value = geoAspect
+        material.uniforms.uMap.value = this.instance.texture
+        material.uniforms.uHasMap.value = 1
+        material.needsUpdate = true
+      }
 
       this._loading = false
       this._onLoad?.()
@@ -896,18 +985,60 @@ export class Video extends Node {
     if (!this._materialProxy) {
       const self = this
       this._materialProxy = {
-        get textureX() {
-          return self.mesh.material.uniforms.uOffset.value.x
-        },
-        set textureX(value) {
-          self.mesh.material.uniforms.uOffset.value.x = value
-        },
-        get textureY() {
-          return self.mesh.material.uniforms.uOffset.value.y
-        },
-        set textureY(value) {
-          self.mesh.material.uniforms.uOffset.value.y = value
-        },
+                 get textureX() {
+           // Check renderer type for proper property access
+           const renderer = self.ctx.world.graphics?.renderer
+           const isWebGPU = renderer && (renderer.isWebGPURenderer || renderer.constructor.name === 'WebGPURenderer')
+           
+           if (isWebGPU) {
+             return self.mesh.material.map?.offset.x || 0
+           } else {
+             return self.mesh.material.uniforms?.uOffset?.value.x || 0
+           }
+         },
+         set textureX(value) {
+           // Check renderer type for proper property update
+           const renderer = self.ctx.world.graphics?.renderer
+           const isWebGPU = renderer && (renderer.isWebGPURenderer || renderer.constructor.name === 'WebGPURenderer')
+           
+           if (isWebGPU) {
+             if (self.mesh.material.map) {
+               self.mesh.material.map.offset.x = value
+               self.mesh.material.map.needsUpdate = true
+             }
+           } else {
+             if (self.mesh.material.uniforms?.uOffset) {
+               self.mesh.material.uniforms.uOffset.value.x = value
+             }
+           }
+         },
+         get textureY() {
+           // Check renderer type for proper property access
+           const renderer = self.ctx.world.graphics?.renderer
+           const isWebGPU = renderer && (renderer.isWebGPURenderer || renderer.constructor.name === 'WebGPURenderer')
+           
+           if (isWebGPU) {
+             return self.mesh.material.map?.offset.y || 0
+           } else {
+             return self.mesh.material.uniforms?.uOffset?.value.y || 0
+           }
+         },
+         set textureY(value) {
+           // Check renderer type for proper property update
+           const renderer = self.ctx.world.graphics?.renderer
+           const isWebGPU = renderer && (renderer.isWebGPURenderer || renderer.constructor.name === 'WebGPURenderer')
+           
+           if (isWebGPU) {
+             if (self.mesh.material.map) {
+               self.mesh.material.map.offset.y = value
+               self.mesh.material.map.needsUpdate = true
+             }
+           } else {
+             if (self.mesh.material.uniforms?.uOffset) {
+               self.mesh.material.uniforms.uOffset.value.y = value
+             }
+           }
+         },
       }
     }
     return this._materialProxy
