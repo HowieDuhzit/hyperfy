@@ -494,72 +494,116 @@ function setupSplatmap(mesh) {
 }
 
 function addWind(mesh, world) {
-  if (!world.wind) return
+  // Comprehensive safety checks with debug info
+  if (!world || !world.wind) {
+    console.warn('Wind: world or world.wind not available')
+    return
+  }
+  if (!mesh || !mesh.material) {
+    console.warn('Wind: mesh or mesh.material not available')
+    return
+  }
+  
   const uniforms = world.wind.uniforms
+  if (!uniforms) {
+    console.warn('Wind: wind uniforms not available')
+    return
+  }
+  
   if (mesh.material.hasWind) return
   mesh.material.hasWind = true
-  // console.log('added wind to', mesh.name)
-  mesh.material.onBeforeCompile = shader => {
-    if (!shader.defines) shader.defines = {}
-    shader.defines.USE_WIND = 1
-    shader.uniforms.time = uniforms.time
-    shader.uniforms.strength = uniforms.strength
-    shader.uniforms.direction = uniforms.direction
-    shader.uniforms.speed = uniforms.speed
-    shader.uniforms.noiseScale = uniforms.noiseScale
-    shader.uniforms.ampScale = uniforms.ampScale
-    shader.uniforms.freqMultiplier = uniforms.freqMultiplier
+  
+  // Check if we're using WebGPU
+  const renderer = world.graphics?.renderer
+  const isWebGPU = renderer && (renderer.isWebGPURenderer || renderer.constructor.name === 'WebGPURenderer')
+  
+  // Ensure geometry and bounding box exist before accessing them
+  if (!mesh.geometry) {
+    console.warn('Wind: mesh has no geometry, skipping wind effect for', mesh.name || 'unnamed mesh')
+    return
+  }
+  
+  if (!mesh.geometry.boundingBox) {
+    try {
+      mesh.geometry.computeBoundingBox()
+    } catch (error) {
+      console.warn('Wind: failed to compute bounding box for', mesh.name || 'unnamed mesh', error)
+      return
+    }
+  }
+  
+  // Additional safety check in case computeBoundingBox failed
+  const height = (mesh.geometry.boundingBox && mesh.geometry.boundingBox.max && mesh.scale) 
+    ? (mesh.geometry.boundingBox.max.y * mesh.scale.y) 
+    : 1.0
+    
+  if (height === 1.0) {
+    console.warn('Wind: using fallback height for', mesh.name || 'unnamed mesh', {
+      hasBoundingBox: !!mesh.geometry.boundingBox,
+      hasMax: !!(mesh.geometry.boundingBox && mesh.geometry.boundingBox.max),
+      hasScale: !!mesh.scale
+    })
+  }
+  
+  if (isWebGPU) {
+    // WebGPU: Create a new material with built-in wind effect
+    const originalMaterial = mesh.material
+    const windMaterial = createWindMaterial(originalMaterial, uniforms, height, world.graphics)
+    mesh.material = windMaterial
+  } else {
+    // WebGL: Use onBeforeCompile approach (existing implementation)
+    mesh.material.onBeforeCompile = shader => {
+      if (!shader.defines) shader.defines = {}
+      shader.defines.USE_WIND = 1
+      shader.uniforms.time = uniforms.time
+      shader.uniforms.strength = uniforms.strength
+      shader.uniforms.direction = uniforms.direction
+      shader.uniforms.speed = uniforms.speed
+      shader.uniforms.noiseScale = uniforms.noiseScale
+      shader.uniforms.ampScale = uniforms.ampScale
+      shader.uniforms.freqMultiplier = uniforms.freqMultiplier
+      shader.uniforms.height = { value: height }
+      shader.uniforms.stiffness = { value: 0 }
 
-    const height = mesh.geometry.boundingBox.max.y * mesh.scale.y
+      shader.vertexShader = shader.vertexShader.replace(
+        '#include <common>',
+        `
+        uniform float time;
+        uniform float strength;
+        uniform vec3 direction;
+        uniform float speed;
+        uniform float noiseScale;
+        uniform float ampScale;
+        uniform float freqMultiplier;
+        uniform float height;
+        uniform float stiffness;
 
-    shader.uniforms.height = { value: height } // prettier-ignore
-    shader.uniforms.stiffness = { value: 0 }
+        ${snoise}
 
-    // BUG: somehow the wind shader code below is added to other meshes
-    // so we wrap it in an ifdef. this might be a bug with CSM because disabling
-    // the prepareMaterial in Stage.js the issues goes away
-    // tbh the wind code should probably be part
-    // of the global shader anyway, same with things like outlines etc.
+        #include <common>
+        `
+      )
 
-    shader.vertexShader = shader.vertexShader.replace(
-      '#include <common>',
-      `
-      uniform float time;
-      uniform float strength;
-      uniform vec3 direction;
-      uniform float speed;
-      uniform float noiseScale;
-      uniform float ampScale;
-      uniform float freqMultiplier;
+      shader.vertexShader = shader.vertexShader.replace(
+        '#include <begin_vertex>',
+        `
+        #include <begin_vertex>
 
-      uniform float height;
-      uniform float stiffness;
+        #ifdef USE_WIND
+          vec4 worldPos = vec4(position, 1.0);
+          #ifdef USE_INSTANCING
+            worldPos = instanceMatrix * worldPos;
+          #endif
+          worldPos = modelMatrix * worldPos;
 
-      ${snoise}
-
-      #include <common>
-      `
-    )
-
-    shader.vertexShader = shader.vertexShader.replace(
-      '#include <begin_vertex>',
-      `
-      #include <begin_vertex>
-
-      #ifdef USE_WIND
-        vec4 worldPos = vec4(position, 1.0);
-        #ifdef USE_INSTANCING
-          worldPos = instanceMatrix * worldPos;
+          float heightFactor = position.y / height;
+          float noiseFactor = snoise(worldPos.xyz * noiseScale + time * speed);
+          vec3 displacement = sin(time * freqMultiplier + worldPos.xyz) * noiseFactor * ampScale * heightFactor * (1.0 - stiffness);
+          transformed += strength * displacement * direction;
         #endif
-        worldPos = modelMatrix * worldPos;
-
-        float heightFactor = position.y / height;
-        float noiseFactor = snoise(worldPos.xyz * noiseScale + time * speed);
-        vec3 displacement = sin(time * freqMultiplier + worldPos.xyz) * noiseFactor * ampScale * heightFactor * (1.0 - stiffness);
-        transformed += strength * displacement * direction;
-      #endif
-      `
-    )
+        `
+      )
+    }
   }
 }
 
@@ -578,6 +622,113 @@ function countMeshes(object3d) {
   }
   
   return count
+}
+
+function createWindMaterial(originalMaterial, windUniforms, height, graphics) {
+  try {
+    // Create WebGPU-compatible wind material using CustomShaderMaterial
+    // This approach works with both WebGL and WebGPU
+    
+    const windMaterial = new CustomShaderMaterial({
+      baseMaterial: originalMaterial.isMeshStandardMaterial ? THREE.MeshStandardMaterial : THREE.MeshBasicMaterial,
+      
+      // Copy all original material properties
+      color: originalMaterial.color || new THREE.Color(0xffffff),
+      map: originalMaterial.map,
+      normalMap: originalMaterial.normalMap,
+      roughnessMap: originalMaterial.roughnessMap,
+      metalnessMap: originalMaterial.metalnessMap,
+      roughness: originalMaterial.roughness !== undefined ? originalMaterial.roughness : 1,
+      metalness: originalMaterial.metalness !== undefined ? originalMaterial.metalness : 0,
+      transparent: originalMaterial.transparent,
+      opacity: originalMaterial.opacity !== undefined ? originalMaterial.opacity : 1,
+      side: originalMaterial.side !== undefined ? originalMaterial.side : THREE.FrontSide,
+      alphaTest: originalMaterial.alphaTest,
+      
+      // Wind uniforms
+      uniforms: {
+        time: windUniforms.time,
+        strength: windUniforms.strength,
+        direction: windUniforms.direction,
+        speed: windUniforms.speed,
+        noiseScale: windUniforms.noiseScale,
+        ampScale: windUniforms.ampScale,
+        freqMultiplier: windUniforms.freqMultiplier,
+        height: { value: Math.max(height, 0.1) }, // Ensure minimum height
+        stiffness: { value: 0 }
+      },
+      
+      // Vertex shader with wind effect
+      vertexShader: `
+        uniform float time;
+        uniform float strength;
+        uniform vec3 direction;
+        uniform float speed;
+        uniform float noiseScale;
+        uniform float ampScale;
+        uniform float freqMultiplier;
+        uniform float height;
+        uniform float stiffness;
+        
+        ${snoise}
+        
+        varying vec2 vUv;
+        
+        void main() {
+          vUv = uv;
+          
+          vec3 transformed = position;
+          
+          // Wind effect calculation
+          vec4 worldPos = vec4(position, 1.0);
+          #ifdef USE_INSTANCING
+            worldPos = instanceMatrix * worldPos;
+          #endif
+          worldPos = modelMatrix * worldPos;
+          
+          float heightFactor = clamp(position.y / height, 0.0, 1.0);
+          float noiseFactor = snoise(worldPos.xyz * noiseScale + time * speed);
+          vec3 displacement = sin(time * freqMultiplier + worldPos.xyz) * noiseFactor * ampScale * heightFactor * (1.0 - stiffness);
+          transformed += strength * displacement * direction;
+          
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(transformed, 1.0);
+          
+          // Calculate normal for lighting (approximate)
+          #ifdef USE_INSTANCING
+            csm_Normal = normalize((instanceMatrix * vec4(normal, 0.0)).xyz);
+          #else
+            csm_Normal = normal;
+          #endif
+        }
+      `,
+      
+      // Fragment shader (let CSM handle material properties)
+      fragmentShader: `
+        varying vec2 vUv;
+        
+        void main() {
+          // CSM will handle material properties automatically
+          csm_DiffuseColor = vec4(1.0, 1.0, 1.0, 1.0);
+        }
+      `
+    })
+    
+    // Mark as having wind
+    windMaterial.hasWind = true
+    
+    // Apply any graphics setup
+    if (graphics && graphics.setupMaterial) {
+      graphics.setupMaterial(windMaterial)
+    }
+    
+    return windMaterial
+    
+  } catch (error) {
+    console.warn('Failed to create wind material, falling back to original:', error)
+    // Fallback: return original material with wind flag
+    originalMaterial.hasWind = true
+    return originalMaterial
+  }
 }
 
 const snoise = `
