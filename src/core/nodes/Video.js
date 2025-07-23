@@ -162,8 +162,12 @@ export class Video extends Node {
         material.side = this._doubleside ? THREE.DoubleSide : THREE.FrontSide
         
         // Apply video texture with fit logic and offset support
-        if (uniforms.uMap.value) {
-          material.map = uniforms.uMap.value
+        // Only apply texture if video is ready and texture exists
+        if (this.instance?.ready && this.instance?.texture) {
+          try {
+            material.map = this.instance.texture
+            uniforms.uMap.value = this.instance.texture
+            uniforms.uHasMap.value = 1
           
           // Apply initial UV offset
           const offsetX = uniforms.uOffset.value.x
@@ -205,11 +209,21 @@ export class Video extends Node {
             material.map.offset.set(offsetX, offsetY)
           }
           
-          material.map.needsUpdate = true
+                      material.map.needsUpdate = true
+          } catch (error) {
+            console.warn('[Video] WebGPU initial texture assignment failed:', error)
+            // Fall back to placeholder
+            material.color.set(this._color || 'black')
+            material.map = null
+          }
+        } else {
+          // Video not ready yet - show placeholder color
+          material.color.set(this._color || 'black')
+          material.map = null
         }
         
         // Apply background color for contain mode outside areas
-        if (this._color !== 'white') {
+        if (this._color !== 'white' && material.map) {
           material.color.set(uniforms.uColor.value)
         }
         
@@ -435,13 +449,16 @@ export class Video extends Node {
       
       if (isWebGPU) {
         // WebGPU: Update texture and recalculate fit/offset logic
-        material.map = this.instance.texture
-        
-        // Recalculate fit logic with new video dimensions
-        const offsetX = 0 // TODO: Support dynamic offset updates
-        const offsetY = 0
-        const fit = this._fit === 'cover' ? 1 : this._fit === 'contain' ? 2 : 0
-        const aspect = geoAspect / vidAspect
+        // Only assign texture if video is ready to prevent VideoFrame construction errors
+        if (this.instance.ready && this.instance.texture) {
+          try {
+            material.map = this.instance.texture
+          
+          // Recalculate fit logic with new video dimensions
+          const offsetX = 0 // TODO: Support dynamic offset updates
+          const offsetY = 0
+          const fit = this._fit === 'cover' ? 1 : this._fit === 'contain' ? 2 : 0
+          const aspect = geoAspect / vidAspect
         
         if (fit === 1) { // cover mode
           if (aspect > 1.0) {
@@ -468,8 +485,19 @@ export class Video extends Node {
           material.map.offset.set(offsetX, offsetY)
         }
         
-        material.map.needsUpdate = true
-        material.needsUpdate = true
+            material.map.needsUpdate = true
+            material.needsUpdate = true
+          } catch (error) {
+            console.warn('[Video] WebGPU texture update failed:', error)
+            // Fall back to placeholder
+            material.color.set(this._color || 'black')
+            material.map = null
+          }
+        } else {
+          // Video not ready yet - set a placeholder color and wait for ready state
+          material.color.set(this._color || 'black')
+          material.map = null
+        }
       } else {
         // WebGL: Update uniforms as before
         material.uniforms.uVidAspect.value = vidAspect
@@ -495,6 +523,59 @@ export class Video extends Node {
       this.mount()
       return
     }
+    
+    // Check if video became ready and update WebGPU texture
+    if (this.mesh && this.instance && this.instance.ready && this.instance.texture && this._visible) {
+      const renderer = this.ctx.world.graphics?.renderer
+      const isWebGPU = renderer && (renderer.isWebGPURenderer || renderer.constructor.name === 'WebGPURenderer')
+      
+      if (isWebGPU && (!this.mesh.material.map || this.mesh.material.map !== this.instance.texture)) {
+        try {
+          // Video is now ready, update the material texture
+          this.mesh.material.map = this.instance.texture
+          this.mesh.material.needsUpdate = true
+        
+        // Apply proper fit/aspect logic if needed
+        const vidAspect = this.instance.width / this.instance.height
+        const geoAspect = this._aspect || (this._geometry ? this._aspect : 1)
+        const aspect = geoAspect / vidAspect
+        const fit = this._fit === 'cover' ? 1 : this._fit === 'contain' ? 2 : 0
+        
+        if (fit === 1) { // cover mode
+          if (aspect > 1.0) {
+            const scale = 1.0 / aspect
+            this.mesh.material.map.repeat.set(1.0, scale)
+            this.mesh.material.map.offset.set(0, (1.0 - scale) / 2)
+          } else {
+            const scale = aspect
+            this.mesh.material.map.repeat.set(scale, 1.0)
+            this.mesh.material.map.offset.set((1.0 - scale) / 2, 0)
+          }
+        } else if (fit === 2) { // contain mode
+          if (aspect > 1.0) {
+            const scale = aspect
+            this.mesh.material.map.repeat.set(scale, 1.0)
+            this.mesh.material.map.offset.set((1.0 - scale) / 2, 0)
+          } else {
+            const scale = 1.0 / aspect
+            this.mesh.material.map.repeat.set(1.0, scale)
+            this.mesh.material.map.offset.set(0, (1.0 - scale) / 2)
+          }
+        } else { // none mode
+          this.mesh.material.map.repeat.set(1, 1)
+          this.mesh.material.map.offset.set(0, 0)
+        }
+        
+          this.mesh.material.map.needsUpdate = true
+        } catch (error) {
+          console.warn('[Video] WebGPU texture assignment failed:', error)
+          // Keep placeholder material without texture
+          this.mesh.material.map = null
+          this.mesh.material.color.set(this._color || 'black')
+        }
+      }
+    }
+    
     if (didMove) {
       if (this.mesh) {
         this.mesh.matrixWorld.copy(this.matrixWorld)
