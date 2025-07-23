@@ -31,15 +31,37 @@ const rendererOptions = [
   { label: 'WebGL (Compatible)', value: 'webgl', description: 'Legacy graphics API' },
 ]
 
-const antialiasingOptions = [
+const webglAntialiasingOptions = [
   { label: 'Off', value: 'none', performance: '++' },
-  { label: 'FXAA', value: 'fxaa', performance: '+' },
-  { label: 'SMAA', value: 'smaa', performance: '0' },
-  { label: 'TAA', value: 'taa', performance: '-' },
-  { label: 'MSAA 2x', value: 'msaa2x', performance: '--' },
-  { label: 'MSAA 4x', value: 'msaa4x', performance: '---' },
-  { label: 'MSAA 8x', value: 'msaa8x', performance: '----' },
+  { label: 'FXAA (Fast)', value: 'fxaa', performance: '+' },
+  { label: 'SMAA (Recommended)', value: 'smaa', performance: '0' },
+  { label: 'TAA (Temporal)', value: 'taa', performance: '-' },
+  { label: 'MSAA 2x (Hardware)', value: 'msaa2x', performance: '--' },
+  { label: 'MSAA 4x (Hardware)', value: 'msaa4x', performance: '---' },
+  { label: 'MSAA 8x (Hardware)', value: 'msaa8x', performance: '----' },
 ]
+
+const webgpuAntialiasingOptions = [
+  { label: 'Off', value: 'none', performance: '++' },
+  { label: 'FXAA (GPU Optimized)', value: 'fxaa', performance: '+' },
+  { label: 'SMAA (GPU Accelerated)', value: 'smaa', performance: '+' },
+  { label: 'TAA (Advanced)', value: 'taa', performance: '0' },
+  { label: 'MSAA 2x (Native)', value: 'msaa2x', performance: '-' },
+  { label: 'MSAA 4x (Native)', value: 'msaa4x', performance: '--' },
+  { label: 'MSAA 8x (Native)', value: 'msaa8x', performance: '---' },
+]
+
+// Auto-detect best options based on renderer
+const getAntialiasingOptions = (renderer) => {
+  if (renderer === 'webgl') {
+    return webglAntialiasingOptions
+  } else if (renderer === 'webgpu') {
+    return webgpuAntialiasingOptions
+  } else {
+    // Auto mode - show all options
+    return webglAntialiasingOptions
+  }
+}
 
 const textureQualityOptions = [
   { label: 'Low (512px)', value: 'low', performance: '++' },
@@ -476,12 +498,12 @@ function GeneralSettings({ world, player }) {
       
       <ModernField 
         label="Anti-Aliasing" 
-        hint="Reduces jagged edges. FXAA is fast, SMAA is balanced, MSAA is highest quality"
-        performance={antialiasingOptions.find(o => o.value === antialiasing)?.performance}
+        hint={`Reduces jagged edges. ${renderer === 'webgl' ? 'WebGL: FXAA is fast, SMAA is balanced, TAA/MSAA are highest quality' : renderer === 'webgpu' ? 'WebGPU: All methods use modern GPU acceleration' : 'Auto: Options adapt to selected renderer'}`}
+        performance={getAntialiasingOptions(renderer).find(o => o.value === antialiasing)?.performance}
         icon={SettingsIcon}
       >
         <InputSwitch 
-          options={antialiasingOptions} 
+          options={getAntialiasingOptions(renderer)} 
           value={antialiasing} 
           onChange={aa => world.prefs.setAntialiasing(aa)} 
         />

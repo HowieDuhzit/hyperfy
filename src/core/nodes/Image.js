@@ -113,6 +113,10 @@ export class Image extends Node {
     }
     const geometry = new THREE.PlaneGeometry(width, height)
     applyPivot(geometry, width, height, this._pivot)
+    
+    // UNIFIED MATERIAL CREATION: Let the loader handle WebGPU compatibility
+    console.log('🖼️ Creating Image node with unified material pipeline')
+    
     const uniforms = {
       uMap: { value: this.texture },
       uImgAspect: { value: imgAspect },
@@ -121,15 +125,16 @@ export class Image extends Node {
       uColor: { value: new THREE.Color(this._color) },
       uTransparent: { value: this._color === 'transparent' ? 1.0 : 0.0 },
     }
-    // WebGPU compatibility: Check if WebGPU renderer is being used
+    
+    // Check renderer type for material selection
     const renderer = this.world.graphics?.renderer
     const isWebGPU = renderer && (renderer.isWebGPURenderer || renderer.constructor.name === 'WebGPURenderer')
     
     let material
     
     if (isWebGPU) {
-      // Use basic material for WebGPU compatibility
-      console.log('Using basic material for Image node (WebGPU compatibility)')
+      // WebGPU: Use standard materials with proper setup
+      console.log('🚀 Using WebGPU-compatible material for Image node')
       material = this._lit ? new THREE.MeshStandardMaterial() : new THREE.MeshBasicMaterial()
       
       if (this._lit) {
@@ -140,114 +145,70 @@ export class Image extends Node {
       material.side = this._doubleside ? THREE.DoubleSide : THREE.FrontSide
       material.transparent = this._color === 'transparent'
       
-      // Basic texture application for WebGPU
+      // Apply texture and color
       if (uniforms.uMap.value) {
         material.map = uniforms.uMap.value
       }
       
-      if (this._color !== 'white') {
+      if (this._color !== 'white' && this._color !== 'transparent') {
         material.color.set(uniforms.uColor.value)
       }
+      
+      // Apply unified material processing
+      this.ctx.world.setupMaterial(material)
+      
     } else {
-      // Use CustomShaderMaterial for WebGL
+      // WebGL: Use CustomShaderMaterial for advanced features
+      console.log('🎨 Using CustomShaderMaterial for Image node (WebGL)')
       material = new CustomShaderMaterial({
         baseMaterial: this._lit ? THREE.MeshStandardMaterial : THREE.MeshBasicMaterial,
-        ...(this._lit ? { roughness: 1, metalness: 0 } : {}),
+        roughness: this._lit ? 1 : undefined,
+        metalness: this._lit ? 0 : undefined,
         side: this._doubleside ? THREE.DoubleSide : THREE.FrontSide,
         transparent: this._color === 'transparent',
         uniforms,
         vertexShader: `
-        varying vec2 vUv;
-        void main() {
-          vUv = uv;
-        }
-      `,
-      fragmentShader: `
-        uniform sampler2D uMap;
-        uniform float uImgAspect;
-        uniform float uGeoAspect;
-        uniform float uFit; // 0 = none, 1 = cover, 2 = contain
-        uniform vec3 uColor; 
-        uniform float uTransparent;
-        
-        varying vec2 vUv;
-
-        vec4 sRGBToLinear(vec4 color) {
-          return vec4(pow(color.rgb, vec3(2.2)), color.a);
-        }
-        
-        vec4 LinearToSRGB(vec4 color) {
-            return vec4(pow(color.rgb, vec3(1.0 / 2.2)), color.a);
-        }
-        
-        void main() {
-          // Calculate aspect ratio relationship between image and geometry
-          float aspect = uGeoAspect / uImgAspect;
-
-          vec2 uv = vUv;
-          
-          // COVER MODE (uFit = 1.0)
-          if (abs(uFit - 1.0) < 0.01) {
-            // Center the UV coordinates
-            uv = uv - 0.5;
-            
-            if (aspect > 1.0) {
-              // Geometry is wider than video:
-              // - Fill horizontally (maintain x scale)
-              // - Scale vertically to maintain aspect ratio (shrink y)
-              uv.y /= aspect;
-            } else {
-              // Geometry is taller than video:
-              // - Fill vertically (maintain y scale)
-              // - Scale horizontally to maintain aspect ratio (shrink x)
-              uv.x *= aspect;
-            }
-            
-            // Return to 0-1 range
-            uv = uv + 0.5;
+          varying vec2 vUv;
+          void main() {
+            vUv = uv;
           }
-          // CONTAIN MODE (uFit = 2.0)
-          else if (abs(uFit - 2.0) < 0.01) {
-            // Center the UV coordinates
-            uv = uv - 0.5;
-            
-            if (aspect > 1.0) {
-              // Geometry is wider than video:
-              // - Fill vertically (maintain y scale)
-              // - Scale horizontally to fit entire video (expand x)
-              uv.x *= aspect;
-            } else {
-              // Geometry is taller than video:
-              // - Fill horizontally (maintain x scale)
-              // - Scale vertically to fit entire video (expand y)
-              uv.y /= aspect;
-            }
-            
-            // Return to 0-1 range
-            uv = uv + 0.5;
-          }
+        `,
+        fragmentShader: `
+          uniform sampler2D uMap;
+          uniform float uImgAspect;
+          uniform float uGeoAspect;
+          uniform int uFit;
+          uniform vec3 uColor;
+          uniform float uTransparent;
+          varying vec2 vUv;
           
-          // pull UV into [0,1] before sampling
-          vec2 uvClamped = clamp(uv, 0.0, 1.0);
-          vec4 col = texture2D(uMap, uvClamped);
-
-          // outside coloring (for contain mode)
-          if (uFit >= 1.5) {
-            const float EPS = 0.005;
-            // decide “outside” based on the *raw* uv
-            bool outside = uv.x < -EPS || uv.x > 1.0 + EPS || uv.y < -EPS || uv.y > 1.0 + EPS;
-            if (outside) {
-              col = uTransparent > 0.5 ? vec4(0.0, 0.0, 0.0, 0.0) : vec4(uColor, 1.0);
+          void main() {
+            vec2 uv = vUv;
+            
+            // Apply fitting logic
+            if (uFit == 1) { // cover
+              float scale = max(uGeoAspect / uImgAspect, 1.0);
+              uv = (uv - 0.5) * scale + 0.5;
+            } else if (uFit == 2) { // contain
+              float scale = min(uGeoAspect / uImgAspect, 1.0);
+              uv = (uv - 0.5) * scale + 0.5;
             }
-          } 
-
-          csm_DiffuseColor = col;
-        }
-      `,
+            
+            vec4 texColor = texture2D(uMap, uv);
+            
+            if (uTransparent > 0.5) {
+              csm_FragColor = vec4(0.0, 0.0, 0.0, 0.0);
+            } else {
+              csm_FragColor = texColor * vec4(uColor, 1.0);
+            }
+          }
+        `,
       })
+      
+      // Apply unified material processing
+      this.ctx.world.setupMaterial(material)
     }
-    
-    this.ctx.world.setupMaterial(material)
+
     this.mesh = new THREE.Mesh(geometry, material)
     this.mesh.castShadow = this._castShadow
     this.mesh.receiveShadow = this._receiveShadow

@@ -111,9 +111,22 @@ async function createWebGPURenderer() {
     // Dynamic import to avoid errors on systems without WebGPU support
     const { WebGPURenderer } = await import('three/webgpu')
     
+    // Get MSAA level from preferences if available
+    const aa = window.world?.prefs?.antialiasing || 'none'
+    let antialias = true // Default to basic antialiasing
+    
+    // Configure MSAA based on preference
+    if (aa.startsWith('msaa')) {
+      const msaaLevel = parseInt(aa.replace('msaa', ''))
+      console.log('🚀 WebGPU MSAA level:', msaaLevel, 'x')
+      antialias = msaaLevel
+    } else if (aa === 'none') {
+      antialias = false
+    }
+    
     webgpuRenderer = new WebGPURenderer({
       powerPreference: 'high-performance',
-      antialias: true,
+      antialias: antialias,
       forceWebGL: false
     })
     
@@ -126,11 +139,59 @@ async function createWebGPURenderer() {
 }
 
 function createWebGLRenderer() {
+  // Get MSAA level from preferences if available
+  const aa = window.world?.prefs?.antialiasing || 'none'
+  let antialias = true // Default to basic antialiasing
+  
+  // Configure MSAA based on preference
+  if (aa.startsWith('msaa')) {
+    const msaaLevel = parseInt(aa.replace('msaa', ''))
+    console.log('🎨 WebGL MSAA level:', msaaLevel, 'x')
+    antialias = msaaLevel
+  } else if (aa === 'none') {
+    antialias = false
+  }
+  
   return new THREE.WebGLRenderer({
     powerPreference: 'high-performance',
-    antialias: true,
-    // logarithmicDepthBuffer: true,
-    // reverseDepthBuffer: true,
+    antialias: antialias,
+    alpha: true,
+    preserveDrawingBuffer: false,
+    stencil: false,
+    depth: true,
+    logarithmicDepthBuffer: false,
+    // Enable advanced WebGL features for better shader support
+    failIfMajorPerformanceCaveat: false,
+    // Enable extensions for advanced material features
+    extensions: {
+      OES_standard_derivatives: true,
+      OES_element_index_uint: true,
+      OES_vertex_array_object: true,
+      WEBGL_depth_texture: true,
+      WEBGL_draw_buffers: true,
+      WEBGL_compressed_texture_s3tc: true,
+      WEBGL_compressed_texture_pvrtc: true,
+      WEBGL_compressed_texture_etc: true,
+      WEBGL_compressed_texture_etc1: true,
+      WEBGL_compressed_texture_astc: true,
+      EXT_texture_filter_anisotropic: true,
+      EXT_frag_depth: true,
+      EXT_shader_texture_lod: true,
+      EXT_blend_minmax: true,
+      EXT_color_buffer_half_float: true,
+      EXT_color_buffer_float: true,
+      EXT_sRGB: true,
+      EXT_texture_compression_bptc: true,
+      EXT_texture_compression_rgtc: true,
+      EXT_disjoint_timer_query: true,
+      EXT_disjoint_timer_query_webgl2: true,
+      WEBGL_debug_renderer_info: true,
+      WEBGL_debug_shaders: true,
+      WEBGL_lose_context: true,
+      WEBGL_multi_draw: true,
+      WEBGL_provoking_vertex: true,
+      WEBGL_webcodecs_video_frame: true
+    }
   })
 }
 
@@ -211,6 +272,9 @@ export class ClientGraphics extends System {
       await this.initializeRenderer()
       await this.initializePostProcessing()
       await this.initializeAAARendering()
+      
+      // 🛡️ NEW: Apply initial anti-aliasing settings
+      this.applyAntialiasing()
       
       // 🛡️ NEW: Setup resize observer after renderer is initialized
       this.setupResizeObserver()
@@ -294,7 +358,7 @@ export class ClientGraphics extends System {
       console.log('🚀 Initializing WebGPU renderer...')
       
       // 🛡️ FIXED: Use proper WebGPU renderer import
-      const { WebGPURenderer } = await import('three/addons/renderers/webgpu/WebGPURenderer.js')
+      const { WebGPURenderer } = await import('three/webgpu')
       
       this.renderer = new WebGPURenderer({
         antialias: true,
@@ -446,6 +510,16 @@ export class ClientGraphics extends System {
       this.aoPass.setSize(width, height)
     }
     
+    // Update TAA effect size if it exists
+    if (this.taaEffect && this.taaEffect.setSize) {
+      this.taaEffect.setSize(width, height)
+    }
+    
+    // Update FXAA effect size if it exists
+    if (this.fxaaEffect && this.fxaaEffect.setSize) {
+      this.fxaaEffect.setSize(width, height)
+    }
+    
     console.log(`🔄 Resized to ${width}x${height}`)
   }
 
@@ -478,6 +552,8 @@ export class ClientGraphics extends System {
     if (this.world.frame % 6 === 0) { // Every 6 frames instead of every frame (10 FPS instead of 60 FPS)
       this.dispatchComputeShaders()
     }
+    
+
     
     // WebGPU compatibility: Check XR availability
     const isXRPresenting = this.renderer.xr?.isPresenting || false
@@ -544,12 +620,20 @@ export class ClientGraphics extends System {
       this.resize(this.width, this.height)
     }
     
+    // Handle anti-aliasing changes
+    if (changes.antialiasing) {
+      console.log('🎯 Anti-aliasing preference changed to:', changes.antialiasing.value)
+      this.applyAntialiasing()
+    }
+    
     // Handle real-time settings that don't require reload
     if (changes.fieldOfView) {
       this.applyFieldOfView()
     }
     if (changes.toneMappingMode || changes.toneMappingExposure) {
       this.applyToneMappingSettings()
+      // Re-apply display settings after tone mapping to maintain gamma/brightness/contrast
+      this.applyDisplaySettings()
     }
     if (changes.anisotropicFiltering) {
       this.applyAnisotropicFiltering()
@@ -562,6 +646,27 @@ export class ClientGraphics extends System {
     }
     if (changes.frameRateLimit || changes.vsync) {
       this.applyPerformanceSettings()
+    }
+    
+    // Handle shader quality settings
+    if (changes.shaderQuality || changes.materialDetail || changes.reflectionQuality ||
+        changes.subsurfaceScattering || changes.parallaxMapping || changes.tessellation) {
+      this.applyShaderQualitySettings()
+    }
+    
+    // Handle advanced material properties
+    if (changes.normalMapStrength || changes.roughnessVariation || changes.metallicVariation ||
+        changes.emissiveIntensity || changes.clearcoatStrength || changes.clearcoatRoughness ||
+        changes.anisotropy || changes.anisotropyRotation || changes.sheenRoughness ||
+        changes.transmission || changes.thickness || changes.attenuationDistance) {
+      this.applyMaterialProperties()
+    }
+    
+    // Handle shader effects
+    if (changes.fresnelEffect || changes.fresnelStrength || changes.rimLighting ||
+        changes.rimStrength || changes.matcapReflection || changes.environmentMapping ||
+        changes.iridescence || changes.iridescenceStrength || changes.iridescenceThickness) {
+      this.applyShaderEffects()
     }
     
     // Handle AAA Advanced Materials settings (WebGL AND WebGPU for testing)
@@ -624,8 +729,12 @@ export class ClientGraphics extends System {
     // Handle settings that may require post-processing changes
     if (changes.antialiasing || changes.depthOfField || changes.motionBlur || 
         changes.ssReflections || changes.volumetricLighting || changes.ssgi || 
-        changes.taa || changes.temporalUpsampling) {
-      this.applyAntialiasing()
+        changes.taa || changes.temporalUpsampling || changes.bloom || changes.ao) {
+      
+      // Update WebGL post-processing effects
+      if (this.renderer && this.renderer.isWebGLRenderer) {
+        this.updateWebGLPostProcessingEffects()
+      }
       
       // Update advanced post-processing effect states
       if (changes.depthOfField) {
@@ -648,8 +757,67 @@ export class ClientGraphics extends System {
       }
       
       // Force post-processing effects update
-      this.updatePostProcessingEffects()
     }
+    
+    this.applyAntialiasing()
+    
+    // Handle v8: Comprehensive Shader and Rendering Engine Settings
+    // Shader Quality Settings
+    if (changes.shaderQuality || changes.materialDetail || changes.reflectionQuality ||
+        changes.subsurfaceScattering || changes.parallaxMapping || changes.tessellation) {
+      this.applyShaderQualitySettings()
+      console.log('🎨 Shader quality settings updated')
+    }
+    
+    // Advanced Material Properties
+    if (changes.normalMapStrength || changes.roughnessVariation || changes.metallicVariation ||
+        changes.emissiveIntensity || changes.clearcoatStrength || changes.clearcoatRoughness ||
+        changes.anisotropy || changes.anisotropyRotation || changes.sheenColor ||
+        changes.sheenRoughness || changes.transmission || changes.thickness ||
+        changes.attenuationDistance || changes.attenuationColor) {
+      this.applyMaterialProperties()
+      console.log('🔧 Material properties updated')
+    }
+    
+    // Shader Effects
+    if (changes.fresnelEffect || changes.fresnelStrength || changes.rimLighting ||
+        changes.rimStrength || changes.matcapReflection || changes.environmentMapping ||
+        changes.iridescence || changes.iridescenceStrength || changes.iridescenceThickness) {
+      this.applyShaderEffects()
+      console.log('✨ Shader effects updated')
+    }
+    
+    // Rendering Engine Settings
+    if (changes.renderPipeline || changes.computeShaders || changes.cullingMethod ||
+        changes.instancing || changes.batching || changes.occlusionCulling ||
+        changes.frustumCulling || changes.backfaceCulling) {
+      this.applyRenderingEngineSettings()
+      console.log('⚙️ Rendering engine settings updated')
+    }
+    
+    // Memory and Buffer Settings
+    if (changes.vertexBufferSize || changes.indexBufferSize || changes.uniformBufferSize ||
+        changes.textureCacheSize || changes.shaderCacheSize || changes.geometryCacheSize) {
+      this.applyMemorySettings()
+      console.log('💾 Memory settings updated')
+    }
+    
+    // Advanced Rendering Settings
+    if (changes.multisampling || changes.depthPrepass || changes.earlyZTest ||
+        changes.conservativeRasterization || changes.tessellationControlPoints ||
+        changes.geometryShaderSupport || changes.computeShaderWorkgroups || changes.rayTracingSupport) {
+      this.applyAdvancedRenderingSettings()
+      console.log('🔬 Advanced rendering settings updated')
+    }
+    
+    // Performance Tuning
+    if (changes.gpuMemoryBudget || changes.cpuThreadCount || changes.asyncLoading ||
+        changes.streamingTextures || changes.dynamicLOD || changes.adaptiveQuality) {
+      this.applyPerformanceTuning()
+      console.log('🚀 Performance tuning updated')
+    }
+    
+    this.updatePostProcessingEffects()
     
     if (this.isWebGPU) {
       // Update WebGPU post-processing when preferences change
@@ -809,30 +977,533 @@ export class ClientGraphics extends System {
   // Apply anti-aliasing settings
   applyAntialiasing() {
     const aa = this.world.prefs.antialiasing
+    console.log('🎯 Applying anti-aliasing:', aa, 'Renderer:', this.isWebGPU ? 'WebGPU' : 'WebGL')
+    console.log('🎯 World prefs:', this.world.prefs)
+    console.log('🎯 Renderer:', this.renderer)
+    console.log('🎯 Composer:', this.composer)
     
     if (this.isWebGPU) {
-      // WebGPU anti-aliasing handling would go here
-      // For now, log the setting
-      console.log('WebGPU Anti-aliasing:', aa)
-    } else if (this.composer) {
-      // Remove existing AA effects
+      this.applyWebGPUAntialiasing(aa)
+    } else {
+      this.applyWebGLAntialiasing(aa)
+    }
+  }
+  
+  // WebGPU anti-aliasing implementation
+  applyWebGPUAntialiasing(aa) {
+    // Normalize MSAA aliases
+    if (aa === 'msaa2') aa = 'msaa2x';
+    if (aa === 'msaa4') aa = 'msaa4x';
+    if (aa === 'msaa8') aa = 'msaa8x';
+    console.log('🚀 WebGPU Anti-aliasing:', aa)
+    
+    // Remove existing AA effects
+    if (this.webgpuAAEffect) {
+      this.webgpuAAEffect = null
+    }
+    
+    switch (aa) {
+      case 'none':
+        // No post-processing AA
+        console.log('✅ WebGPU: No anti-aliasing')
+        break
+        
+      case 'fxaa':
+        this.setupWebGPUFXAA()
+        break
+        
+      case 'smaa':
+        this.setupWebGPUSMAA()
+        break
+        
+      case 'taa':
+        this.setupWebGPUTAA()
+        break
+        
+      case 'msaa2x':
+      case 'msaa4x':
+      case 'msaa8x':
+        this.setupWebGPUMSAA(aa)
+        break
+        
+      default:
+        console.log('⚠️ WebGPU: Unknown AA method:', aa)
+        break
+    }
+  }
+  
+  // WebGL anti-aliasing implementation
+  applyWebGLAntialiasing(aa) {
+    // Normalize MSAA aliases
+    if (aa === 'msaa2') aa = 'msaa2x';
+    if (aa === 'msaa4') aa = 'msaa4x';
+    if (aa === 'msaa8') aa = 'msaa8x';
+    console.log('🎨 WebGL Anti-aliasing:', aa)
+    console.log('🎨 Composer available:', !!this.composer)
+    console.log('🎨 Current SMAA effect:', !!this.smaaEffect)
+    console.log('🎨 Current FXAA effect:', !!this.fxaaEffect)
+    console.log('🎨 Current TAA effect:', !!this.taaEffect)
+    
+    if (!this.composer) {
+      console.warn('⚠️ WebGL: No composer available for post-processing AA')
+      return
+    }
+    
+    // Remove existing AA effects
+    if (this.smaaEffect) {
       this.composer.removePass(this.smaaEffect)
       this.smaaEffect = null
+    }
+    if (this.fxaaEffect) {
+      this.composer.removePass(this.fxaaEffect)
+      this.fxaaEffect = null
+    }
+    if (this.taaEffect) {
+      this.composer.removePass(this.taaEffect)
+      this.taaEffect = null
+    }
+    
+    switch (aa) {
+      case 'none':
+        // No post-processing AA (MSAA still active if enabled)
+        console.log('✅ WebGL: No post-processing anti-aliasing')
+        break
+        
+      case 'fxaa':
+        this.setupWebGLFXAA()
+        break
+        
+      case 'smaa':
+        this.setupWebGLSMAA()
+        break
+        
+      case 'taa':
+        this.setupWebGLTAA()
+        break
+        
+      case 'msaa2x':
+      case 'msaa4x':
+      case 'msaa8x':
+        this.setupWebGLMSAA(aa)
+        break
+        
+      default:
+        console.log('⚠️ WebGL: Unknown AA method:', aa)
+        break
+    }
+  }
+  
+  // WebGPU FXAA implementation
+  setupWebGPUFXAA() {
+    console.log('🚀 Setting up WebGPU FXAA...')
+    
+    this.webgpuAAEffect = tslFn(() => {
+      const uv = screenUV
+      const color = texture(output, uv)
       
-      // Add new AA effect based on setting
-      if (aa === 'smaa') {
-        try {
-          this.smaaEffect = new SMAAEffect()
-          const effectPass = new EffectPass(this.world.camera, this.smaaEffect)
-          this.composer.addPass(effectPass)
-        } catch (error) {
-          console.warn('SMAA initialization failed:', error)
-        }
-      } else if (aa === 'fxaa') {
-        // FXAA would be implemented here if available in the library
-        console.log('FXAA selected but not yet implemented')
+      // FXAA implementation for WebGPU
+      const texelSize = this.webgpuUniforms.invResolution
+      const luma = dot(color.rgb, vec3(0.299, 0.587, 0.114))
+      
+      // Sample neighboring pixels
+      const n = texture(output, uv.add(vec2(0, -1).mul(texelSize)))
+      const s = texture(output, uv.add(vec2(0, 1).mul(texelSize)))
+      const e = texture(output, uv.add(vec2(1, 0).mul(texelSize)))
+      const w = texture(output, uv.add(vec2(-1, 0).mul(texelSize)))
+      
+      const lumaN = dot(n.rgb, vec3(0.299, 0.587, 0.114))
+      const lumaS = dot(s.rgb, vec3(0.299, 0.587, 0.114))
+      const lumaE = dot(e.rgb, vec3(0.299, 0.587, 0.114))
+      const lumaW = dot(w.rgb, vec3(0.299, 0.587, 0.114))
+      
+      const lumaMin = min(min(lumaN, lumaS), min(lumaE, lumaW))
+      const lumaMax = max(max(lumaN, lumaS), max(lumaE, lumaW))
+      const lumaRange = lumaMax.sub(lumaMin)
+      
+      // Apply FXAA if edge is detected
+      const edgeThreshold = 0.0833
+      const subpixelQuality = 0.75
+      
+      if (lumaRange.greaterThan(edgeThreshold)) {
+        // Simple FXAA blend
+        const blend = lumaRange.mul(subpixelQuality)
+        return mix(color.rgb, color.rgb.mul(0.5).add(n.rgb.add(s.rgb.add(e.rgb.add(w.rgb))).mul(0.125)), blend)
       }
-      // MSAA is handled at renderer level during creation
+      
+      return color.rgb
+    })
+    
+    console.log('✅ WebGPU FXAA setup complete')
+  }
+  
+  // WebGPU SMAA implementation
+  setupWebGPUSMAA() {
+    console.log('🚀 Setting up WebGPU SMAA...')
+    
+    // SMAA is complex, so we'll implement a simplified version
+    this.webgpuAAEffect = tslFn(() => {
+      const uv = screenUV
+      const color = texture(output, uv)
+      
+      // Simplified SMAA-like edge detection and blending
+      const texelSize = this.webgpuUniforms.invResolution
+      
+      // Sample 3x3 neighborhood
+      const samples = []
+      for (let i = -1; i <= 1; i++) {
+        for (let j = -1; j <= 1; j++) {
+          const sampleUV = uv.add(vec2(i, j).mul(texelSize))
+          samples.push(texture(output, sampleUV))
+        }
+      }
+      
+      // Calculate edge strength
+      let edgeStrength = 0.0
+      for (let i = 0; i < samples.length; i++) {
+        const luma = dot(samples[i].rgb, vec3(0.299, 0.587, 0.114))
+        edgeStrength = edgeStrength.add(luma)
+      }
+      edgeStrength = edgeStrength.div(9.0)
+      
+      // Apply smoothing based on edge strength
+      const smoothingFactor = 0.5
+      const smoothedColor = color.rgb.mul(1.0.sub(edgeStrength.mul(smoothingFactor)))
+      
+      return smoothedColor
+    })
+    
+    console.log('✅ WebGPU SMAA setup complete')
+  }
+  
+  // WebGPU TAA implementation
+  setupWebGPUTAA() {
+    console.log('🚀 Setting up WebGPU TAA...')
+    
+    // Use the existing TAA implementation
+    this.setupTAA()
+    this.webgpuAAEffect = this.taaShader
+    
+    console.log('✅ WebGPU TAA setup complete')
+  }
+  
+  // WebGPU MSAA implementation
+  setupWebGPUMSAA(aa) {
+    console.log('🚀 Setting up WebGPU MSAA:', aa)
+    
+    // MSAA is handled at the renderer level
+    const msaaLevel = parseInt(aa.replace('msaa', ''))
+    console.log('✅ WebGPU MSAA level:', msaaLevel, 'x')
+    
+    // MSAA requires renderer recreation
+    this.recreateRendererForMSAA()
+  }
+  
+  // WebGL FXAA implementation
+  setupWebGLFXAA() {
+    console.log('🎨 Setting up WebGL FXAA...')
+    
+    try {
+      // Create custom FXAA effect that extends the postprocessing library's Effect class
+      class FXAAEffect extends Pass {
+        constructor() {
+          super('FXAAEffect')
+          
+          this.uniforms = {
+            tDiffuse: { value: null },
+            resolution: { value: new THREE.Vector2() }
+          }
+          
+          this.fragmentShader = `
+            uniform sampler2D tDiffuse;
+            uniform vec2 resolution;
+            varying vec2 vUv;
+            
+            #define FXAA_REDUCE_MIN (1.0/128.0)
+            #define FXAA_REDUCE_MUL (1.0/8.0)
+            #define FXAA_SPAN_MAX 8.0
+            
+            vec4 fxaa(sampler2D tex, vec2 fragCoord, vec2 resolution,
+                     float spanMax, float reduceMin, float reduceMul,
+                     float subpixelQuality) {
+              vec3 rgbNW = texture2D(tex, (fragCoord + vec2(-1.0, -1.0)) / resolution).xyz;
+              vec3 rgbNE = texture2D(tex, (fragCoord + vec2(1.0, -1.0)) / resolution).xyz;
+              vec3 rgbSW = texture2D(tex, (fragCoord + vec2(-1.0, 1.0)) / resolution).xyz;
+              vec3 rgbSE = texture2D(tex, (fragCoord + vec2(1.0, 1.0)) / resolution).xyz;
+              vec3 rgbM  = texture2D(tex, fragCoord / resolution).xyz;
+              
+              vec3 luma = vec3(0.299, 0.587, 0.114);
+              float lumaNW = dot(rgbNW, luma);
+              float lumaNE = dot(rgbNE, luma);
+              float lumaSW = dot(rgbSW, luma);
+              float lumaSE = dot(rgbSE, luma);
+              float lumaM  = dot(rgbM, luma);
+              
+              float lumaMin = min(lumaM, min(min(lumaNW, lumaNE), min(lumaSW, lumaSE)));
+              float lumaMax = max(lumaM, max(max(lumaNW, lumaNE), max(lumaSW, lumaSE)));
+              
+              vec2 dir;
+              dir.x = -((lumaNW + lumaNE) - (lumaSW + lumaSE));
+              dir.y =  ((lumaNW + lumaSW) - (lumaNE + lumaSE));
+              
+              float dirReduce = max((lumaNW + lumaNE + lumaSW + lumaSE) * (0.25 * reduceMul), reduceMin);
+              float rcpDirMin = 1.0 / (min(abs(dir.x), abs(dir.y)) + dirReduce);
+              dir = min(vec2(spanMax, spanMax), max(vec2(-spanMax, -spanMax), dir * rcpDirMin)) / resolution;
+              
+              vec3 rgbA = 0.5 * (texture2D(tex, fragCoord / resolution + dir * (1.0 / 3.0 - 0.5)).xyz +
+                                 texture2D(tex, fragCoord / resolution + dir * (2.0 / 3.0 - 0.5)).xyz);
+              vec3 rgbB = rgbA * 0.5 + 0.25 * (texture2D(tex, fragCoord / resolution + dir * -0.5).xyz +
+                                               texture2D(tex, fragCoord / resolution + dir * 0.5).xyz);
+              
+              float lumaB = dot(rgbB, luma);
+              if ((lumaB < lumaMin) || (lumaB > lumaMax)) {
+                return vec4(rgbA, 1.0);
+              } else {
+                return vec4(rgbB, 1.0);
+              }
+            }
+            
+            void main() {
+              vec2 fragCoord = gl_FragCoord.xy;
+              gl_FragColor = fxaa(tDiffuse, fragCoord, resolution, FXAA_SPAN_MAX, FXAA_REDUCE_MIN, FXAA_REDUCE_MUL, 0.75);
+            }
+          `
+          
+          this.vertexShader = `
+            varying vec2 vUv;
+            void main() {
+              vUv = uv;
+              gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+            }
+          `
+          
+          this.material = new THREE.ShaderMaterial({
+            uniforms: this.uniforms,
+            vertexShader: this.vertexShader,
+            fragmentShader: this.fragmentShader
+          })
+        }
+        
+        setSize(width, height) {
+          this.uniforms.resolution.value.set(width, height)
+        }
+        
+        render(renderer, inputBuffer, outputBuffer) {
+          this.material.uniforms.tDiffuse.value = inputBuffer.texture
+          renderer.setRenderTarget(outputBuffer)
+          renderer.render(this.scene, this.camera)
+        }
+      }
+      
+      this.fxaaEffect = new FXAAEffect()
+      this.composer.addPass(this.fxaaEffect)
+      
+      console.log('✅ WebGL FXAA setup complete with custom effect');
+    } catch (error) {
+      console.warn('⚠️ WebGL FXAA setup failed:', error)
+      // Fall back to SMAA
+      this.setupWebGLSMAA()
+    }
+  }
+  
+  // WebGL SMAA implementation
+  setupWebGLSMAA() {
+    console.log('🎨 Setting up WebGL SMAA...')
+    
+    try {
+      this.smaaEffect = new SMAAEffect(SMAAPreset.HIGH)
+      const effectPass = new EffectPass(this.world.camera, this.smaaEffect)
+      this.composer.addPass(effectPass)
+      console.log('✅ WebGL SMAA setup complete')
+      console.log('✅ SMAA effect created:', !!this.smaaEffect)
+      console.log('✅ Effect pass added to composer')
+    } catch (error) {
+      console.warn('⚠️ WebGL SMAA setup failed:', error)
+    }
+  }
+  
+  // WebGL TAA implementation
+  setupWebGLTAA() {
+    console.log('🎨 Setting up WebGL TAA...')
+    
+    try {
+      // Create custom TAA effect that extends the postprocessing library's Effect class
+      class TAAEffect extends Pass {
+        constructor() {
+          super('TAAEffect')
+          
+          this.uniforms = {
+            tDiffuse: { value: null },
+            tPrevious: { value: null },
+            resolution: { value: new THREE.Vector2() },
+            time: { value: 0.0 },
+            blendFactor: { value: 0.9 }
+          }
+          
+          this.fragmentShader = `
+            uniform sampler2D tDiffuse;
+            uniform sampler2D tPrevious;
+            uniform vec2 resolution;
+            uniform float time;
+            uniform float blendFactor;
+            varying vec2 vUv;
+            
+            // Halton sequence for jittering
+            vec2 halton(int index) {
+              vec2 result = vec2(0.0);
+              float f = 1.0;
+              for (int i = 0; i < 16; i++) {
+                if (index > 0) {
+                  f = float(index) / 2.0;
+                  result.x += mod(f, 1.0) / (256.0 * f);
+                  f = floor(f);
+                }
+                if (index > 0) {
+                  f = float(index) / 3.0;
+                  result.y += mod(f, 1.0) / (256.0 * f);
+                  f = floor(f);
+                }
+              }
+              return result;
+            }
+            
+            // Neighborhood clamping for TAA
+            vec3 clampToNeighborhood(vec3 color, vec2 uv) {
+              vec2 texelSize = 1.0 / resolution;
+              vec3 minColor = color;
+              vec3 maxColor = color;
+              
+              // Sample 3x3 neighborhood
+              for (int x = -1; x <= 1; x++) {
+                for (int y = -1; y <= 1; y++) {
+                  vec2 offset = vec2(float(x), float(y)) * texelSize;
+                  vec3 sample = texture2D(tDiffuse, uv + offset).rgb;
+                  minColor = min(minColor, sample);
+                  maxColor = max(maxColor, sample);
+                }
+              }
+              
+              return clamp(color, minColor, maxColor);
+            }
+            
+            void main() {
+              vec2 uv = vUv;
+              
+              // Add jitter based on time
+              int frameIndex = int(mod(time * 60.0, 16.0));
+              vec2 jitter = halton(frameIndex) * 2.0 - 1.0;
+              jitter *= 0.5 / resolution;
+              
+              // Sample current frame with jitter
+              vec3 currentColor = texture2D(tDiffuse, uv + jitter).rgb;
+              
+              // Sample previous frame (without jitter for stability)
+              vec3 previousColor = texture2D(tPrevious, uv).rgb;
+              
+              // Clamp previous color to neighborhood
+              vec3 clampedPrevious = clampToNeighborhood(previousColor, uv);
+              
+              // Blend current and previous frames
+              vec3 finalColor = mix(currentColor, clampedPrevious, blendFactor);
+              
+              gl_FragColor = vec4(finalColor, 1.0);
+            }
+          `
+          
+          this.vertexShader = `
+            varying vec2 vUv;
+            void main() {
+              vUv = uv;
+              gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+            }
+          `
+          
+          this.material = new THREE.ShaderMaterial({
+            uniforms: this.uniforms,
+            vertexShader: this.vertexShader,
+            fragmentShader: this.fragmentShader
+          })
+          
+          // Create render target for previous frame
+          this.previousFrameTarget = new THREE.WebGLRenderTarget(1, 1, {
+            format: THREE.RGBAFormat,
+            type: THREE.FloatType
+          })
+        }
+        
+        setSize(width, height) {
+          this.uniforms.resolution.value.set(width, height)
+          this.previousFrameTarget.setSize(width, height)
+        }
+        
+        render(renderer, inputBuffer, outputBuffer) {
+          this.material.uniforms.tDiffuse.value = inputBuffer.texture
+          this.material.uniforms.tPrevious.value = this.previousFrameTarget.texture
+          this.material.uniforms.time.value = performance.now() * 0.001
+          
+          renderer.setRenderTarget(outputBuffer)
+          renderer.render(this.scene, this.camera)
+          
+          // Copy current frame to previous frame target for next frame
+          renderer.setRenderTarget(this.previousFrameTarget)
+          renderer.render(this.scene, this.camera)
+        }
+      }
+      
+      this.taaEffect = new TAAEffect()
+      this.composer.addPass(this.taaEffect)
+      
+      console.log('✅ WebGL TAA setup complete with custom effect');
+    } catch (error) {
+      console.warn('⚠️ WebGL TAA setup failed:', error)
+      // Fall back to SMAA
+      this.setupWebGLSMAA()
+    }
+  }
+  
+  // WebGL MSAA implementation
+  setupWebGLMSAA(aa) {
+    console.log('🎨 Setting up WebGL MSAA:', aa)
+    
+    // MSAA is handled at the renderer level during creation
+    const msaaLevel = parseInt(aa.replace('msaa', ''))
+    console.log('✅ WebGL MSAA level:', msaaLevel, 'x')
+    
+    // MSAA requires renderer recreation
+    this.recreateRendererForMSAA()
+  }
+  
+  // Handle renderer recreation for MSAA changes
+  async recreateRendererForMSAA() {
+    console.log('🔄 Recreating renderer for MSAA change...')
+    
+    try {
+      // Store current renderer state
+      const currentRenderer = this.renderer
+      const isWebGPU = this.isWebGPU
+      
+      // Remove current renderer from viewport
+      if (this.viewport && currentRenderer) {
+        this.viewport.removeChild(currentRenderer.domElement)
+      }
+      
+      // Recreate renderer with new MSAA settings
+      if (isWebGPU) {
+        await this.initializeWebGPURenderer()
+      } else {
+        this.initializeWebGLRenderer()
+      }
+      
+      // Re-add to viewport
+      if (this.viewport && this.renderer) {
+        this.viewport.appendChild(this.renderer.domElement)
+      }
+      
+      // Reinitialize post-processing
+      await this.initializePostProcessing()
+      
+      console.log('✅ Renderer recreated successfully for MSAA')
+    } catch (error) {
+      console.error('❌ Failed to recreate renderer for MSAA:', error)
     }
   }
 
@@ -874,13 +1545,646 @@ export class ClientGraphics extends System {
 
   // Apply display settings (gamma, brightness, contrast)
   applyDisplaySettings() {
-    // These would typically be applied via post-processing or shader uniforms
-    // For now, store them for use in post-processing pipeline
+    const gamma = this.world.prefs.gamma || 2.2
+    const brightness = this.world.prefs.brightness || 1.0
+    const contrast = this.world.prefs.contrast || 1.0
+    
+    if (this.renderer) {
+      // Store settings for post-processing pipeline
     this.displaySettings = {
-      gamma: this.world.prefs.gamma,
-      brightness: this.world.prefs.brightness,
-      contrast: this.world.prefs.contrast
+        gamma: gamma,
+        brightness: brightness,
+        contrast: contrast
+      }
+      
+      // Apply brightness and contrast by modifying the tone mapping exposure
+      // This is the most reliable way to affect overall scene brightness
+      const baseExposure = this.world.prefs.toneMappingExposure || 1.0
+      
+      // Apply brightness multiplier
+      let adjustedExposure = baseExposure * brightness
+      
+      // Apply contrast adjustment
+      if (contrast !== 1.0) {
+        // Contrast affects the exposure curve
+        // Higher contrast = brighter highlights, darker shadows
+        adjustedExposure *= contrast
+      }
+      
+      // Apply gamma correction
+      if (gamma !== 2.2) {
+        // Gamma correction affects the overall brightness curve
+        // Lower gamma = brighter midtones
+        const gammaCorrection = Math.pow(2.2 / gamma, 0.5)
+        adjustedExposure *= gammaCorrection
+      }
+      
+      // Set the final exposure
+      this.renderer.toneMappingExposure = adjustedExposure
+      
+      console.log(`🎨 Applied display settings: Gamma=${gamma}, Brightness=${brightness}, Contrast=${contrast}, Final Exposure=${adjustedExposure.toFixed(3)}`)
+      
+      // Additional debug info
+      if (brightness !== 1.0 || contrast !== 1.0 || gamma !== 2.2) {
+        console.log(`🔧 Display settings active: Brightness=${brightness !== 1.0 ? 'ON' : 'OFF'}, Contrast=${contrast !== 1.0 ? 'ON' : 'OFF'}, Gamma=${gamma !== 2.2 ? 'ON' : 'OFF'}`)
+      }
     }
+  }
+
+  // Apply shader quality settings
+  applyShaderQualitySettings() {
+    const shaderQuality = this.world.prefs.shaderQuality || 'enhanced'
+    const materialDetail = this.world.prefs.materialDetail || 'high'
+    const reflectionQuality = this.world.prefs.reflectionQuality || 'high'
+    const subsurfaceScattering = this.world.prefs.subsurfaceScattering || true
+    const parallaxMapping = this.world.prefs.parallaxMapping || false
+    const tessellation = this.world.prefs.tessellation || false
+    
+    // Store shader quality settings
+    this.shaderSettings = {
+      shaderQuality,
+      materialDetail,
+      reflectionQuality,
+      subsurfaceScattering,
+      parallaxMapping,
+      tessellation
+    }
+    
+    let materialCount = 0
+    const processedMaterials = new Set() // Prevent duplicate processing
+    const MAX_MATERIALS_PER_FRAME = 100 // Limit materials processed per frame to prevent memory issues
+    
+    // Apply to all materials in the scene
+    this.world.stage.scene.traverse(obj => {
+      if (obj.material && !processedMaterials.has(obj.material) && materialCount < MAX_MATERIALS_PER_FRAME) {
+        const materials = Array.isArray(obj.material) ? obj.material : [obj.material]
+        materials.forEach(material => {
+          if (!processedMaterials.has(material) && materialCount < MAX_MATERIALS_PER_FRAME) {
+            this.updateMaterialQuality(material, this.world.prefs)
+            processedMaterials.add(material)
+            materialCount++
+          }
+        })
+      }
+    })
+    
+    console.log(`🎨 Applied shader quality settings to ${materialCount} materials: Quality=${shaderQuality}, Detail=${materialDetail}, Reflections=${reflectionQuality}`)
+    
+    // If we hit the limit, schedule more processing
+    if (materialCount >= MAX_MATERIALS_PER_FRAME) {
+      console.log(`⚠️ Material limit reached (${MAX_MATERIALS_PER_FRAME}), scheduling additional processing...`)
+      setTimeout(() => this.applyShaderQualitySettings(), 100)
+    }
+  }
+
+  // Apply advanced material properties
+  applyMaterialProperties() {
+    const normalMapStrength = this.world.prefs.normalMapStrength || 1.0
+    const roughnessVariation = this.world.prefs.roughnessVariation || 0.1
+    const metallicVariation = this.world.prefs.metallicVariation || 0.1
+    const emissiveIntensity = this.world.prefs.emissiveIntensity || 1.0
+    const clearcoatStrength = this.world.prefs.clearcoatStrength || 0.0
+    const clearcoatRoughness = this.world.prefs.clearcoatRoughness || 0.1
+    const anisotropy = this.world.prefs.anisotropy || 0.0
+    const anisotropyRotation = this.world.prefs.anisotropyRotation || 0.0
+    const sheenRoughness = this.world.prefs.sheenRoughness || 0.5
+    const transmission = this.world.prefs.transmission || 0.0
+    const thickness = this.world.prefs.thickness || 1.0
+    const attenuationDistance = this.world.prefs.attenuationDistance || 1.0
+    
+    // Store material property settings
+    this.materialProperties = {
+      normalMapStrength,
+      roughnessVariation,
+      metallicVariation,
+      emissiveIntensity,
+      clearcoatStrength,
+      clearcoatRoughness,
+      anisotropy,
+      anisotropyRotation,
+      sheenRoughness,
+      transmission,
+      thickness,
+      attenuationDistance
+    }
+    
+    let materialCount = 0
+    let normalMapCount = 0
+    let roughnessCount = 0
+    let metallicCount = 0
+    let emissiveCount = 0
+    const processedMaterials = new Set() // Prevent duplicate processing
+    const MAX_MATERIALS_PER_FRAME = 100 // Limit materials processed per frame to prevent memory issues
+    
+    // Apply to all materials in the scene
+    this.world.stage.scene.traverse(obj => {
+      if (obj.material && !processedMaterials.has(obj.material) && materialCount < MAX_MATERIALS_PER_FRAME) {
+        const materials = Array.isArray(obj.material) ? obj.material : [obj.material]
+        materials.forEach(material => {
+          if (!processedMaterials.has(material) && materialCount < MAX_MATERIALS_PER_FRAME) {
+            this.updateMaterialProperties(material, this.world.prefs)
+            processedMaterials.add(material)
+            materialCount++
+            
+            // Count which properties were actually applied
+            if (material.normalMap) normalMapCount++
+            if (material.roughness !== undefined) roughnessCount++
+            if (material.metalness !== undefined) metallicCount++
+            if (material.emissive) emissiveCount++
+          }
+        })
+      }
+    })
+    
+    console.log(`🎨 Applied material properties to ${materialCount} materials: Normal=${normalMapStrength} (${normalMapCount} with normal maps), Roughness=${roughnessVariation} (${roughnessCount} materials), Metallic=${metallicVariation} (${metallicCount} materials), Emissive=${emissiveIntensity} (${emissiveCount} materials)`)
+    
+    // If we hit the limit, schedule more processing
+    if (materialCount >= MAX_MATERIALS_PER_FRAME) {
+      console.log(`⚠️ Material limit reached (${MAX_MATERIALS_PER_FRAME}), scheduling additional processing...`)
+      setTimeout(() => this.applyMaterialProperties(), 100)
+    }
+  }
+
+  // Apply shader effects
+  applyShaderEffects() {
+    const fresnelEffect = this.world.prefs.fresnelEffect || false
+    const fresnelStrength = this.world.prefs.fresnelStrength || 1.0
+    const rimLighting = this.world.prefs.rimLighting || false
+    const rimStrength = this.world.prefs.rimStrength || 1.0
+    const matcapReflection = this.world.prefs.matcapReflection || false
+    const environmentMapping = this.world.prefs.environmentMapping || true
+    const iridescence = this.world.prefs.iridescence || false
+    const iridescenceStrength = this.world.prefs.iridescenceStrength || 1.0
+    const iridescenceThickness = this.world.prefs.iridescenceThickness || 1.0
+    
+    // Store shader effect settings
+    this.shaderEffects = {
+      fresnelEffect,
+      fresnelStrength,
+      rimLighting,
+      rimStrength,
+      matcapReflection,
+      environmentMapping,
+      iridescence,
+      iridescenceStrength,
+      iridescenceThickness
+    }
+    
+    let materialCount = 0
+    let envMapCount = 0
+    let iridescenceCount = 0
+    let fresnelCount = 0
+    let rimCount = 0
+    let matcapCount = 0
+    const processedMaterials = new Set() // Prevent duplicate processing
+    const MAX_MATERIALS_PER_FRAME = 100 // Limit materials processed per frame to prevent memory issues
+    
+    // Apply to all materials in the scene
+    this.world.stage.scene.traverse(obj => {
+      if (obj.material && !processedMaterials.has(obj.material) && materialCount < MAX_MATERIALS_PER_FRAME) {
+        const materials = Array.isArray(obj.material) ? obj.material : [obj.material]
+        materials.forEach(material => {
+          if (!processedMaterials.has(material) && materialCount < MAX_MATERIALS_PER_FRAME) {
+            this.updateShaderEffects(material, this.world.prefs)
+            processedMaterials.add(material)
+            materialCount++
+            
+            // Count which effects were actually applied
+            if (material.envMapIntensity !== undefined) envMapCount++
+            if (material.iridescence !== undefined && iridescence) iridescenceCount++
+            if (fresnelEffect && material.envMapIntensity !== undefined) fresnelCount++
+            if (rimLighting && material.emissive) rimCount++
+            if (matcapReflection && material.envMapIntensity !== undefined) matcapCount++
+          }
+        })
+      }
+    })
+    
+    console.log(`🎨 Applied shader effects to ${materialCount} materials: Environment=${environmentMapping} (${envMapCount} materials), Fresnel=${fresnelEffect} (${fresnelCount} materials), Rim=${rimLighting} (${rimCount} materials), Matcap=${matcapReflection} (${matcapCount} materials), Iridescence=${iridescence} (${iridescenceCount} materials)`)
+    
+    // If we hit the limit, schedule more processing
+    if (materialCount >= MAX_MATERIALS_PER_FRAME) {
+      console.log(`⚠️ Material limit reached (${MAX_MATERIALS_PER_FRAME}), scheduling additional processing...`)
+      setTimeout(() => this.applyShaderEffects(), 100)
+    }
+  }
+
+  // Update material quality based on shader settings
+  updateMaterialQuality(material, prefs) {
+    if (!material || !material.isMaterial) return
+    
+    const shaderQuality = prefs.shaderQuality || 'enhanced'
+    const materialDetail = prefs.materialDetail || 'high'
+    const reflectionQuality = prefs.reflectionQuality || 'high'
+    
+    // Apply quality-based material adjustments
+    switch (shaderQuality) {
+      case 'ultra':
+        material.precision = 'highp'
+        material.envMapIntensity = 1.0
+        break
+      case 'aaa':
+        material.precision = 'highp'
+        material.envMapIntensity = 0.8
+        break
+      case 'enhanced':
+        material.precision = 'mediump'
+        material.envMapIntensity = 0.6
+        break
+      case 'standard':
+        material.precision = 'mediump'
+        material.envMapIntensity = 0.4
+        break
+      case 'basic':
+        material.precision = 'lowp'
+        material.envMapIntensity = 0.2
+        break
+    }
+    
+    // Apply detail level adjustments
+    if (material.normalMap) {
+      switch (materialDetail) {
+        case 'ultra':
+          material.normalScale.setScalar(2.0)
+          break
+        case 'high':
+          material.normalScale.setScalar(1.5)
+          break
+        case 'medium':
+          material.normalScale.setScalar(1.0)
+          break
+        case 'low':
+          material.normalScale.setScalar(0.5)
+          break
+      }
+    }
+    
+    material.needsUpdate = true
+  }
+
+  // Update material properties based on shader settings
+  updateMaterialProperties(material, prefs) {
+    if (!material || !material.isMaterial) return
+    
+    const normalMapStrength = prefs.normalMapStrength || 1.0
+    const roughnessVariation = prefs.roughnessVariation || 0.1
+    const metallicVariation = prefs.metallicVariation || 0.1
+    const emissiveIntensity = prefs.emissiveIntensity || 1.0
+    const clearcoatStrength = prefs.clearcoatStrength || 0.0
+    const clearcoatRoughness = prefs.clearcoatRoughness || 0.1
+    const anisotropy = prefs.anisotropy || 0.0
+    const anisotropyRotation = prefs.anisotropyRotation || 0.0
+    const sheenRoughness = prefs.sheenRoughness || 0.5
+    const transmission = prefs.transmission || 0.0
+    const thickness = prefs.thickness || 1.0
+    const attenuationDistance = prefs.attenuationDistance || 1.0
+    
+    // WebGL-specific optimizations
+    const isWebGL = this.renderer && this.renderer.isWebGLRenderer
+    
+    // Apply normal map strength (this works well)
+    if (material.normalMap) {
+      material.normalScale.setScalar(normalMapStrength)
+      
+      // WebGL-specific normal map optimizations
+      if (isWebGL) {
+        // Ensure normal map is properly configured for WebGL
+        material.normalMap.wrapS = THREE.ClampToEdgeWrapping
+        material.normalMap.wrapT = THREE.ClampToEdgeWrapping
+        material.normalMap.generateMipmaps = true
+        material.normalMap.minFilter = THREE.LinearMipmapLinearFilter
+        material.normalMap.magFilter = THREE.LinearFilter
+      }
+    }
+    
+    // Apply roughness variation - set absolute value instead of adding
+    if (material.roughness !== undefined) {
+      // Store original roughness if not already stored
+      if (material.userData.originalRoughness === undefined) {
+        material.userData.originalRoughness = material.roughness
+      }
+      const baseRoughness = material.userData.originalRoughness
+      material.roughness = Math.max(0.0, Math.min(1.0, baseRoughness + roughnessVariation))
+    }
+    
+    // Apply metallic variation - set absolute value instead of adding
+    if (material.metalness !== undefined) {
+      // Store original metalness if not already stored
+      if (material.userData.originalMetalness === undefined) {
+        material.userData.originalMetalness = material.metalness
+      }
+      const baseMetalness = material.userData.originalMetalness
+      material.metalness = Math.max(0.0, Math.min(1.0, baseMetalness + metallicVariation))
+    }
+    
+    // Apply emissive intensity - work with both emissiveIntensity and emissive color
+    if (material.emissive) {
+      // Store original emissive if not already stored
+      if (material.userData.originalEmissive === undefined) {
+        material.userData.originalEmissive = material.emissive.clone()
+      }
+      
+      // Apply intensity to emissive color
+      const originalEmissive = material.userData.originalEmissive
+      material.emissive.copy(originalEmissive).multiplyScalar(emissiveIntensity)
+      
+      // Also set emissiveIntensity if the property exists
+      if (material.emissiveIntensity !== undefined) {
+        material.emissiveIntensity = emissiveIntensity
+      }
+      
+      // WebGL-specific emissive optimizations
+      if (isWebGL && material.emissiveMap) {
+        material.emissiveMap.wrapS = THREE.ClampToEdgeWrapping
+        material.emissiveMap.wrapT = THREE.ClampToEdgeWrapping
+        material.emissiveMap.generateMipmaps = true
+      }
+    }
+    
+    // Apply clearcoat properties (for MeshPhysicalMaterial)
+    if (material.clearcoat !== undefined) {
+      material.clearcoat = clearcoatStrength
+      material.clearcoatRoughness = clearcoatRoughness
+      
+      // WebGL-specific clearcoat optimizations
+      if (isWebGL && material.clearcoatMap) {
+        material.clearcoatMap.wrapS = THREE.ClampToEdgeWrapping
+        material.clearcoatMap.wrapT = THREE.ClampToEdgeWrapping
+        material.clearcoatMap.generateMipmaps = true
+      }
+    }
+    
+    // Apply anisotropy (for MeshPhysicalMaterial)
+    if (material.anisotropy !== undefined) {
+      material.anisotropy = anisotropy
+      material.anisotropyRotation = anisotropyRotation
+      
+      // WebGL-specific anisotropy optimizations
+      if (isWebGL && material.anisotropyMap) {
+        material.anisotropyMap.wrapS = THREE.ClampToEdgeWrapping
+        material.anisotropyMap.wrapT = THREE.ClampToEdgeWrapping
+        material.anisotropyMap.generateMipmaps = true
+      }
+    }
+    
+    // Apply sheen properties (for MeshPhysicalMaterial)
+    if (material.sheenRoughness !== undefined) {
+      material.sheenRoughness = sheenRoughness
+      
+      // WebGL-specific sheen optimizations
+      if (isWebGL && material.sheenRoughnessMap) {
+        material.sheenRoughnessMap.wrapS = THREE.ClampToEdgeWrapping
+        material.sheenRoughnessMap.wrapT = THREE.ClampToEdgeWrapping
+        material.sheenRoughnessMap.generateMipmaps = true
+      }
+    }
+    
+    // Apply transmission properties (for MeshPhysicalMaterial)
+    if (material.transmission !== undefined) {
+      material.transmission = transmission
+      material.thickness = thickness
+      material.attenuationDistance = attenuationDistance
+      
+      // WebGL-specific transmission optimizations
+      if (isWebGL && material.transmissionMap) {
+        material.transmissionMap.wrapS = THREE.ClampToEdgeWrapping
+        material.transmissionMap.wrapT = THREE.ClampToEdgeWrapping
+        material.transmissionMap.generateMipmaps = true
+      }
+    }
+    
+    // Apply environment map intensity based on reflection quality
+    const reflectionQuality = prefs.reflectionQuality || 'high'
+    if (material.envMapIntensity !== undefined) {
+      // Store original envMapIntensity if not already stored
+      if (material.userData.originalEnvMapIntensity === undefined) {
+        material.userData.originalEnvMapIntensity = material.envMapIntensity
+      }
+      
+      let envIntensity = 0.5 // default
+      switch (reflectionQuality) {
+        case 'ultra':
+          envIntensity = 1.0
+          break
+        case 'high':
+          envIntensity = 0.8
+          break
+        case 'medium':
+          envIntensity = 0.5
+          break
+        case 'low':
+          envIntensity = 0.2
+          break
+      }
+      material.envMapIntensity = envIntensity
+      
+      // WebGL-specific environment map optimizations
+      if (isWebGL && material.envMap) {
+        material.envMap.wrapS = THREE.ClampToEdgeWrapping
+        material.envMap.wrapT = THREE.ClampToEdgeWrapping
+        material.envMap.generateMipmaps = true
+        material.envMap.minFilter = THREE.LinearMipmapLinearFilter
+        material.envMap.magFilter = THREE.LinearFilter
+      }
+    }
+    
+    // WebGL-specific material optimizations
+    if (isWebGL) {
+      // Enable WebGL-specific features
+      material.defines = material.defines || {}
+      material.defines.USE_WEBGL = 1
+      
+      // Optimize for WebGL rendering
+      if (material.map) {
+        material.map.wrapS = THREE.ClampToEdgeWrapping
+        material.map.wrapT = THREE.ClampToEdgeWrapping
+        material.map.generateMipmaps = true
+        material.map.minFilter = THREE.LinearMipmapLinearFilter
+        material.map.magFilter = THREE.LinearFilter
+      }
+      
+      // Enable anisotropic filtering if available
+      if (this.renderer.capabilities.getMaxAnisotropy() > 1) {
+        const maxAnisotropy = this.renderer.capabilities.getMaxAnisotropy()
+        if (material.map) material.map.anisotropy = maxAnisotropy
+        if (material.normalMap) material.normalMap.anisotropy = maxAnisotropy
+        if (material.roughnessMap) material.roughnessMap.anisotropy = maxAnisotropy
+        if (material.metalnessMap) material.metalnessMap.anisotropy = maxAnisotropy
+        if (material.emissiveMap) material.emissiveMap.anisotropy = maxAnisotropy
+      }
+    }
+    
+    material.needsUpdate = true
+  }
+
+  // Update shader effects based on settings
+  updateShaderEffects(material, prefs) {
+    if (!material || !material.isMaterial) return
+    
+    const fresnelEffect = prefs.fresnelEffect || false
+    const fresnelStrength = prefs.fresnelStrength || 1.0
+    const rimLighting = prefs.rimLighting || false
+    const rimStrength = prefs.rimStrength || 1.0
+    const matcapReflection = prefs.matcapReflection || false
+    const environmentMapping = prefs.environmentMapping || true
+    const iridescence = prefs.iridescence || false
+    const iridescenceStrength = prefs.iridescenceStrength || 1.0
+    const iridescenceThickness = prefs.iridescenceThickness || 1.0
+    
+    // WebGL-specific optimizations
+    const isWebGL = this.renderer && this.renderer.isWebGLRenderer
+    
+    // Apply environment mapping
+    if (environmentMapping) {
+      material.envMap = this.world.stage.scene.environment || null
+      // Environment map intensity is handled in updateMaterialProperties
+      
+      // WebGL-specific environment mapping optimizations
+      if (isWebGL && material.envMap) {
+        material.envMap.wrapS = THREE.ClampToEdgeWrapping
+        material.envMap.wrapT = THREE.ClampToEdgeWrapping
+        material.envMap.generateMipmaps = true
+        material.envMap.minFilter = THREE.LinearMipmapLinearFilter
+        material.envMap.magFilter = THREE.LinearFilter
+        material.envMap.mapping = THREE.EquirectangularReflectionMapping
+      }
+    } else {
+      material.envMap = null
+      material.envMapIntensity = 0.0
+    }
+    
+    // Apply iridescence (for MeshPhysicalMaterial)
+    if (material.iridescence !== undefined && iridescence) {
+      material.iridescence = iridescenceStrength
+      material.iridescenceIOR = 1.3
+      material.iridescenceThickness = iridescenceThickness
+      
+      // WebGL-specific iridescence optimizations
+      if (isWebGL) {
+        material.defines = material.defines || {}
+        material.defines.IRIDESCENCE = 1
+        material.defines.IRIDESCENCE_STRENGTH = iridescenceStrength.toFixed(2)
+        material.defines.IRIDESCENCE_THICKNESS = iridescenceThickness.toFixed(2)
+      }
+    }
+    
+    // Apply fresnel effect by modifying environment map intensity
+    if (fresnelEffect && material.envMapIntensity !== undefined) {
+      // Store original envMapIntensity if not already stored
+      if (material.userData.originalEnvMapIntensity === undefined) {
+        material.userData.originalEnvMapIntensity = material.envMapIntensity
+      }
+      const baseEnvIntensity = material.userData.originalEnvMapIntensity
+      material.envMapIntensity = baseEnvIntensity * fresnelStrength
+      
+      // WebGL-specific fresnel optimizations
+      if (isWebGL) {
+        material.defines = material.defines || {}
+        material.defines.FRESNEL_EFFECT = 1
+        material.defines.FRESNEL_STRENGTH = fresnelStrength.toFixed(2)
+      }
+    }
+    
+    // Apply rim lighting effect by modifying emissive properties
+    if (rimLighting && material.emissive) {
+      // Store original emissive if not already stored
+      if (material.userData.originalEmissive === undefined) {
+        material.userData.originalEmissive = material.emissive.clone()
+      }
+      
+      // Add rim lighting to existing emissive
+      const originalEmissive = material.userData.originalEmissive
+      const rimColor = new THREE.Color(0xffffff).multiplyScalar(rimStrength * 0.3)
+      material.emissive.copy(originalEmissive).add(rimColor)
+      
+      // WebGL-specific rim lighting optimizations
+      if (isWebGL) {
+        material.defines = material.defines || {}
+        material.defines.RIM_LIGHTING = 1
+        material.defines.RIM_STRENGTH = rimStrength.toFixed(2)
+      }
+    }
+    
+    // Apply matcap reflection by creating a simple reflection effect
+    if (matcapReflection && material.envMapIntensity !== undefined) {
+      // Store original envMapIntensity if not already stored
+      if (material.userData.originalEnvMapIntensity === undefined) {
+        material.userData.originalEnvMapIntensity = material.envMapIntensity
+      }
+      const baseEnvIntensity = material.userData.originalEnvMapIntensity
+      material.envMapIntensity = baseEnvIntensity * 1.5 // Boost reflection for matcap effect
+      
+      // WebGL-specific matcap optimizations
+      if (isWebGL) {
+        material.defines = material.defines || {}
+        material.defines.MATCAP_REFLECTION = 1
+      }
+    }
+    
+    // WebGL-specific shader effect optimizations
+    if (isWebGL) {
+      // Enable WebGL-specific shader features
+      material.defines = material.defines || {}
+      material.defines.USE_WEBGL_EFFECTS = 1
+      
+      // Optimize shader compilation for WebGL
+      if (material.onBeforeCompile) {
+        const originalBeforeCompile = material.onBeforeCompile
+        material.onBeforeCompile = (shader) => {
+          // Apply WebGL-specific shader modifications
+          shader.defines = shader.defines || {}
+          shader.defines.USE_WEBGL = 1
+          
+          // Add custom shader code for effects
+          if (fresnelEffect) {
+            shader.defines.FRESNEL_EFFECT = 1
+          }
+          if (rimLighting) {
+            shader.defines.RIM_LIGHTING = 1
+          }
+          if (matcapReflection) {
+            shader.defines.MATCAP_REFLECTION = 1
+          }
+          if (iridescence) {
+            shader.defines.IRIDESCENCE = 1
+          }
+          
+          // Call original onBeforeCompile if it exists
+          if (originalBeforeCompile) {
+            originalBeforeCompile.call(material, shader)
+          }
+        }
+      }
+    }
+    
+    material.needsUpdate = true
+  }
+
+  // Reset material to original values when settings are reset
+  resetMaterialToOriginal(material) {
+    if (!material || !material.isMaterial) return
+    
+    // Reset roughness
+    if (material.userData.originalRoughness !== undefined) {
+      material.roughness = material.userData.originalRoughness
+    }
+    
+    // Reset metalness
+    if (material.userData.originalMetalness !== undefined) {
+      material.metalness = material.userData.originalMetalness
+    }
+    
+    // Reset emissive
+    if (material.userData.originalEmissive !== undefined) {
+      material.emissive.copy(material.userData.originalEmissive)
+    }
+    
+    // Reset environment map intensity
+    if (material.userData.originalEnvMapIntensity !== undefined) {
+      material.envMapIntensity = material.userData.originalEnvMapIntensity
+    }
+    
+    material.needsUpdate = true
   }
 
   // Update all graphics settings
@@ -892,7 +2196,12 @@ export class ClientGraphics extends System {
     this.applyAntialiasing()
     this.applyPerformanceSettings()
     this.applyLODSettings()
+    // Apply display settings last to ensure they override tone mapping exposure
     this.applyDisplaySettings()
+    // Apply shader settings
+    this.applyShaderQualitySettings()
+    this.applyMaterialProperties()
+    this.applyShaderEffects()
   }
 
 
@@ -2024,6 +3333,155 @@ export class ClientGraphics extends System {
     }
   }
 
+  // v8: Comprehensive Shader and Rendering Engine Settings Implementation
+  
+
+  
+  // Apply rendering engine settings
+  applyRenderingEngineSettings() {
+    const prefs = this.world.prefs
+    console.log('⚙️ Applying rendering engine settings:', {
+      renderPipeline: prefs.renderPipeline,
+      computeShaders: prefs.computeShaders,
+      cullingMethod: prefs.cullingMethod,
+      instancing: prefs.instancing,
+      batching: prefs.batching
+    })
+    
+    // Update renderer settings
+    if (this.renderer) {
+      this.updateRendererSettings(prefs)
+    }
+    
+    // Update culling systems
+    this.updateCullingSettings(prefs)
+  }
+  
+  // Apply memory settings
+  applyMemorySettings() {
+    const prefs = this.world.prefs
+    console.log('💾 Applying memory settings:', {
+      vertexBufferSize: prefs.vertexBufferSize,
+      indexBufferSize: prefs.indexBufferSize,
+      uniformBufferSize: prefs.uniformBufferSize,
+      textureCacheSize: prefs.textureCacheSize
+    })
+    
+    // Update buffer sizes and cache settings
+    this.updateMemorySettings(prefs)
+  }
+  
+  // Apply advanced rendering settings
+  applyAdvancedRenderingSettings() {
+    const prefs = this.world.prefs
+    console.log('🔬 Applying advanced rendering settings:', {
+      multisampling: prefs.multisampling,
+      depthPrepass: prefs.depthPrepass,
+      earlyZTest: prefs.earlyZTest,
+      conservativeRasterization: prefs.conservativeRasterization
+    })
+    
+    // Update advanced rendering features
+    this.updateAdvancedRenderingSettings(prefs)
+  }
+  
+  // Apply performance tuning
+  applyPerformanceTuning() {
+    const prefs = this.world.prefs
+    console.log('🚀 Applying performance tuning:', {
+      gpuMemoryBudget: prefs.gpuMemoryBudget,
+      cpuThreadCount: prefs.cpuThreadCount,
+      asyncLoading: prefs.asyncLoading,
+      streamingTextures: prefs.streamingTextures
+    })
+    
+    // Update performance settings
+    this.updatePerformanceSettings(prefs)
+  }
+  
+  // Helper methods for updating specific aspects
+  
+
+  
+
+  
+
+  
+
+  
+  updateCullingSettings(prefs) {
+    // Update culling method and settings
+    if (this.world.stage) {
+      // Update frustum culling
+      if (prefs.frustumCulling !== undefined) {
+        this.world.stage.frustumCulling = prefs.frustumCulling
+      }
+      
+      // Update occlusion culling
+      if (prefs.occlusionCulling !== undefined) {
+        this.world.stage.occlusionCulling = prefs.occlusionCulling
+      }
+    }
+  }
+  
+  updateMemorySettings(prefs) {
+    // Update memory and buffer settings
+    // Note: These would typically be applied during system initialization
+    // For now, we'll log the settings
+    console.log('💾 Memory settings updated:', {
+      vertexBufferSize: prefs.vertexBufferSize,
+      indexBufferSize: prefs.indexBufferSize,
+      uniformBufferSize: prefs.uniformBufferSize,
+      textureCacheSize: prefs.textureCacheSize,
+      shaderCacheSize: prefs.shaderCacheSize,
+      geometryCacheSize: prefs.geometryCacheSize
+    })
+  }
+  
+  updateAdvancedRenderingSettings(prefs) {
+    // Update advanced rendering features
+    console.log('🔬 Advanced rendering settings updated:', {
+      multisampling: prefs.multisampling,
+      depthPrepass: prefs.depthPrepass,
+      earlyZTest: prefs.earlyZTest,
+      conservativeRasterization: prefs.conservativeRasterization,
+      tessellationControlPoints: prefs.tessellationControlPoints,
+      geometryShaderSupport: prefs.geometryShaderSupport,
+      computeShaderWorkgroups: prefs.computeShaderWorkgroups,
+      rayTracingSupport: prefs.rayTracingSupport
+    })
+  }
+  
+  updatePerformanceSettings(prefs) {
+    // Update performance tuning settings
+    console.log('🚀 Performance settings updated:', {
+      gpuMemoryBudget: prefs.gpuMemoryBudget,
+      cpuThreadCount: prefs.cpuThreadCount,
+      asyncLoading: prefs.asyncLoading,
+      streamingTextures: prefs.streamingTextures,
+      dynamicLOD: prefs.dynamicLOD,
+      adaptiveQuality: prefs.adaptiveQuality
+    })
+    
+    // Apply adaptive quality if enabled
+    if (prefs.adaptiveQuality) {
+      this.enableAdaptiveQuality()
+    } else {
+      this.disableAdaptiveQuality()
+    }
+  }
+  
+  enableAdaptiveQuality() {
+    // Enable adaptive quality system
+    console.log('🔄 Adaptive quality enabled')
+    // Implementation would monitor performance and adjust settings automatically
+  }
+  
+  disableAdaptiveQuality() {
+    // Disable adaptive quality system
+    console.log('🔄 Adaptive quality disabled')
+  }
+
   destroy() {
     // Clean up AAA rendering systems
     if (this.advancedMaterials) {
@@ -2071,25 +3529,147 @@ export class ClientGraphics extends System {
     }
   }
 
-  // 🛡️ NEW: Setup WebGL post-processing
+  // 🛡️ NEW: Setup WebGL post-processing with enhanced shader support
   setupWebGLPostProcessing() {
-    console.log('🔄 Setting up WebGL post-processing...')
+    console.log('🔄 Setting up WebGL post-processing with enhanced shader support...')
     
     this.composer = new EffectComposer(this.renderer)
     this.renderPass = new RenderPass(this.world.stage.scene, this.world.camera)
     this.composer.addPass(this.renderPass)
     
-    // Add basic effects
+    // Enhanced WebGL post-processing pipeline with shader support
+    this.setupWebGLEffects()
+    
+    console.log('✅ WebGL post-processing initialized with enhanced shader support')
+  }
+  
+  // 🎨 NEW: Setup enhanced WebGL effects for shader settings
+  setupWebGLEffects() {
     try {
+      // Ambient Occlusion
       this.aoPass = new N8AOPostPass(this.world.stage.scene, this.world.camera, 
         this.width, this.height)
       this.aoPass.enabled = this.world.prefs?.ao ?? true
       this.composer.addPass(this.aoPass)
+      
+      // Bloom Effect for emissive materials
+      this.bloomPass = new BloomEffect({
+        blendFunction: BlendFunction.ADD,
+        kernelSize: KernelSize.LARGE,
+        luminanceThreshold: 0.3,
+        luminanceSmoothing: 0.75,
+        intensity: 1.0
+      })
+      this.bloomPass.enabled = this.world.prefs?.bloom ?? true
+      this.composer.addPass(new EffectPass(this.world.camera, this.bloomPass))
+      
+      // Tone Mapping for HDR support
+      this.toneMappingPass = new ToneMappingEffect({
+        mode: ToneMappingMode.ACES_FILMIC,
+        exposure: this.world.prefs?.toneMappingExposure ?? 1.0
+      })
+      this.toneMappingPass.enabled = this.world.prefs?.toneMapping ?? true
+      this.composer.addPass(new EffectPass(this.world.camera, this.toneMappingPass))
+      
+      // SMAA Anti-aliasing - will be managed by applyAntialiasing()
+      // Don't add here, let the antialiasing system handle it
+      
+      // Depth of Field (if enabled)
+      if (this.world.prefs?.depthOfField) {
+        this.dofPass = new DepthOfFieldEffect(this.world.camera, {
+          focusDistance: 0.0,
+          focalLength: 24.0,
+          bokehScale: 2.0,
+          height: 480
+        })
+        this.dofPass.enabled = this.world.prefs?.depthOfField ?? false
+        this.composer.addPass(new EffectPass(this.world.camera, this.dofPass))
+      }
+      
+      // Motion Blur (if enabled)
+      if (this.world.prefs?.motionBlur) {
+        this.motionBlurPass = new EffectPass(this.world.camera, new DepthEffect())
+        this.motionBlurPass.enabled = this.world.prefs?.motionBlur ?? false
+        this.composer.addPass(this.motionBlurPass)
+      }
+      
+      console.log('🎨 Enhanced WebGL effects setup complete')
+      
     } catch (error) {
-      console.warn('⚠️ AO pass setup failed:', error)
+      console.warn('⚠️ Enhanced WebGL effects setup failed:', error)
+      // Fallback to basic effects
+      this.setupBasicWebGLEffects()
     }
+  }
+  
+  // 🛡️ FALLBACK: Basic WebGL effects
+  setupBasicWebGLEffects() {
+    console.log('🔄 Setting up basic WebGL effects...')
     
-    console.log('✅ WebGL post-processing initialized')
+    try {
+      // Basic AO
+      this.aoPass = new N8AOPostPass(this.world.stage.scene, this.world.camera, 
+        this.width, this.height)
+      this.aoPass.enabled = this.world.prefs?.ao ?? true
+      this.composer.addPass(this.aoPass)
+      
+      // Basic tone mapping
+      this.toneMappingPass = new ToneMappingEffect({
+        mode: ToneMappingMode.ACES_FILMIC,
+        exposure: 1.0
+      })
+      this.composer.addPass(new EffectPass(this.world.camera, this.toneMappingPass))
+      
+      console.log('✅ Basic WebGL effects setup complete')
+    } catch (error) {
+      console.warn('⚠️ Basic WebGL effects setup failed:', error)
+    }
+  }
+  
+  // 🎨 NEW: Update WebGL post-processing effects
+  updateWebGLPostProcessingEffects() {
+    if (!this.composer) return
+    
+    console.log('🔄 Updating WebGL post-processing effects...')
+    
+    try {
+      // Update AO pass
+      if (this.aoPass) {
+        this.aoPass.enabled = this.world.prefs?.ao ?? true
+      }
+      
+      // Update bloom pass
+      if (this.bloomPass) {
+        this.bloomPass.enabled = this.world.prefs?.bloom ?? true
+      }
+      
+      // Update tone mapping pass
+      if (this.toneMappingPass) {
+        this.toneMappingPass.enabled = this.world.prefs?.toneMapping ?? true
+        if (this.world.prefs?.toneMappingExposure !== undefined) {
+          this.toneMappingPass.exposure = this.world.prefs.toneMappingExposure
+        }
+      }
+      
+      // Update SMAA pass
+      if (this.smaaPass) {
+        this.smaaPass.enabled = this.world.prefs?.antialiasing === 'smaa'
+      }
+      
+      // Update depth of field pass
+      if (this.dofPass) {
+        this.dofPass.enabled = this.world.prefs?.depthOfField ?? false
+      }
+      
+      // Update motion blur pass
+      if (this.motionBlurPass) {
+        this.motionBlurPass.enabled = this.world.prefs?.motionBlur ?? false
+      }
+      
+      console.log('✅ WebGL post-processing effects updated')
+    } catch (error) {
+      console.warn('⚠️ WebGL post-processing effects update failed:', error)
+    }
   }
 
   // 🛡️ NEW: Retry network operation

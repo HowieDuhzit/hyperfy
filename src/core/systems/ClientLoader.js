@@ -50,16 +50,28 @@ export class ClientLoader extends System {
 
   async initAdvancedLoaders() {
     try {
-      // Initialize KTX2Loader for compressed textures
+      // Initialize KTX2Loader for compressed textures (optional)
+      try {
       this.ktx2Loader = new KTX2Loader()
       this.ktx2Loader.setTranscoderPath('/libs/basis/')
+        console.log('✅ KTX2 texture compression initialized')
+      } catch (ktx2Error) {
+        console.warn('⚠️ KTX2 loader not available (files missing), continuing without KTX2 support:', ktx2Error)
+        this.ktx2Loader = null
+      }
       
-      // Initialize DRACOLoader for geometry compression
+      // Initialize DRACOLoader for geometry compression (optional)
+      try {
       this.dracoLoader = new DRACOLoader()
       this.dracoLoader.setDecoderPath('/libs/draco/')
       this.dracoLoader.preload()
+        console.log('✅ DRACO geometry compression initialized')
+      } catch (dracoError) {
+        console.warn('⚠️ DRACO loader not available (files missing), continuing without DRACO support:', dracoError)
+        this.dracoLoader = null
+      }
       
-      console.log('🚀 Advanced compression loaders initialized: KTX2 + DRACO')
+      console.log('🚀 Advanced compression loaders initialized: KTX2 + DRACO (optional)')
     } catch (error) {
       console.warn('⚠️ Advanced loaders initialization failed:', error)
     }
@@ -74,12 +86,16 @@ export class ClientLoader extends System {
         // Configure GLTFLoader with KTX2 support
         this.gltfLoader.setKTX2Loader(this.ktx2Loader)
         console.log('✅ KTX2 compression enabled for GLTF models')
+      } else {
+        console.log('ℹ️ KTX2 texture compression not available, using standard texture loading')
       }
       
       if (this.dracoLoader) {
         // Configure GLTFLoader with DRACO support
         this.gltfLoader.setDRACOLoader(this.dracoLoader)
         console.log('✅ DRACO geometry compression enabled for GLTF models')
+      } else {
+        console.log('ℹ️ DRACO geometry compression not available, using standard geometry loading')
       }
     }
     this.vrmHooks = {
@@ -204,7 +220,10 @@ export class ClientLoader extends System {
         return new Promise(resolve => {
           const img = new Image()
           img.onload = () => {
-            const texture = this.texLoader.load(img.src)
+            const texture = new THREE.Texture(img)
+            texture.colorSpace = THREE.SRGBColorSpace
+            texture.anisotropy = this.world.graphics.maxAnisotropy
+            texture.needsUpdate = true
             this.results.set(key, texture)
             resolve(texture)
             URL.revokeObjectURL(img.src)
@@ -223,7 +242,15 @@ export class ClientLoader extends System {
       }
       if (type === 'model') {
         const buffer = await file.arrayBuffer()
+        
+        // UNIFIED GLB LOADING: Use same process for both WebGL and WebGPU
+        console.log('🔧 Loading GLB model with unified pipeline (WebGL/WebGPU compatible)')
+        
         const glb = await this.gltfLoader.parseAsync(buffer)
+        
+        // Ensure consistent material processing for both renderers
+        this.ensureConsistentMaterials(glb)
+        
         const node = glbToNodes(glb, this.world)
         const model = {
           toNodes() {
@@ -242,6 +269,10 @@ export class ClientLoader extends System {
       if (type === 'emote') {
         const buffer = await file.arrayBuffer()
         const glb = await this.gltfLoader.parseAsync(buffer)
+        
+        // Ensure consistent material processing for emotes too
+        this.ensureConsistentMaterials(glb)
+        
         const factory = createEmoteFactory(glb, url)
         const emote = {
           toClip(options) {
@@ -254,6 +285,10 @@ export class ClientLoader extends System {
       if (type === 'avatar') {
         const buffer = await file.arrayBuffer()
         const glb = await this.gltfLoader.parseAsync(buffer)
+        
+        // Ensure consistent material processing for avatars
+        this.ensureConsistentMaterials(glb)
+        
         const factory = createVRMFactory(glb, this.world.setupMaterial)
         const hooks = this.vrmHooks
         const node = createNode('group', { id: '$root' })
@@ -262,18 +297,11 @@ export class ClientLoader extends System {
         const avatar = {
           factory,
           hooks,
-          toNodes(customHooks) {
-            const clone = node.clone(true)
-            if (customHooks) {
-              clone.get('avatar').hooks = customHooks
-            }
-            return clone
+          toNodes() {
+            return node.clone(true)
           },
           getStats() {
-            const stats = node.getStats(true)
-            // append file size
-            stats.fileBytes = file.size
-            return stats
+            return node.getStats(true)
           },
         }
         this.results.set(key, avatar)
@@ -294,6 +322,80 @@ export class ClientLoader extends System {
     })
     this.promises.set(key, promise)
     return promise
+  }
+
+  // NEW: Ensure consistent material processing between WebGL and WebGPU
+  ensureConsistentMaterials(glb) {
+    const renderer = this.world.graphics?.renderer
+    const isWebGPU = renderer && (renderer.isWebGPURenderer || renderer.constructor.name === 'WebGPURenderer')
+    
+    if (!isWebGPU) {
+      // WebGL - no changes needed, already works correctly
+      return
+    }
+    
+    console.log('🔧 Applying WebGPU material compatibility fixes to GLB')
+    
+    // Traverse all materials in the GLB and ensure WebGPU compatibility
+    glb.scene.traverse((object) => {
+      if (object.isMesh && object.material) {
+        const materials = Array.isArray(object.material) ? object.material : [object.material]
+        
+        materials.forEach((material, index) => {
+          if (material.isMaterial) {
+            // Apply WebGPU-specific material fixes
+            this.applyWebGPUMaterialFixes(material)
+          }
+        })
+      }
+    })
+  }
+  
+  // NEW: Apply WebGPU-specific material fixes to match WebGL behavior
+  applyWebGPUMaterialFixes(material) {
+    // Ensure textures are properly configured for WebGPU
+    const textureProperties = ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'emissiveMap', 'aoMap']
+    
+    textureProperties.forEach(prop => {
+      if (material[prop]) {
+        const texture = material[prop]
+        
+        // Ensure proper texture settings for WebGPU
+        if (texture.isTexture) {
+          // Match WebGL texture configuration
+          texture.anisotropy = Math.min(this.world.graphics?.maxAnisotropy || 16, 16)
+          texture.generateMipmaps = texture.image && 
+            (texture.image.width & (texture.image.width - 1)) === 0 && 
+            (texture.image.height & (texture.image.height - 1)) === 0
+          
+          // Ensure proper color space
+          if (prop === 'map' || prop === 'emissiveMap') {
+            texture.colorSpace = THREE.SRGBColorSpace
+          } else {
+            texture.colorSpace = THREE.NoColorSpace
+          }
+          
+          texture.needsUpdate = true
+        }
+      }
+    })
+    
+    // Ensure material properties are WebGPU-compatible
+    if (material.isMeshStandardMaterial || material.isMeshPhysicalMaterial) {
+      // Clamp values to prevent WebGPU shader compilation issues
+      material.roughness = Math.max(0.04, Math.min(1.0, material.roughness || 1.0))
+      material.metalness = Math.max(0.0, Math.min(1.0, material.metalness || 0.0))
+      
+      // Ensure proper alpha handling
+      if (material.transparent) {
+        material.alphaTest = material.alphaTest || 0.01
+      }
+    }
+    
+    // Force material update
+    material.needsUpdate = true
+    
+    console.log(`✅ Applied WebGPU material fixes to ${material.name || 'unnamed material'}`)
   }
 
   insert(type, url, file) {

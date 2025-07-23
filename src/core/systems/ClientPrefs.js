@@ -95,6 +95,82 @@ export class ClientPrefs extends System {
       data.rayTracedGlobalIllumination = null
       data.rayTracedShadows = null
     }
+    
+    // v8: add comprehensive shader and rendering engine settings
+    if (data.v < 8) {
+      data.v = 8
+      
+      // Shader Quality Settings
+      data.shaderQuality = null
+      data.materialDetail = null
+      data.reflectionQuality = null
+      data.subsurfaceScattering = null
+      data.parallaxMapping = null
+      data.tessellation = null
+      
+      // Advanced Material Properties
+      data.normalMapStrength = null
+      data.roughnessVariation = null
+      data.metallicVariation = null
+      data.emissiveIntensity = null
+      data.clearcoatStrength = null
+      data.clearcoatRoughness = null
+      data.anisotropy = null
+      data.anisotropyRotation = null
+      data.sheenColor = null
+      data.sheenRoughness = null
+      data.transmission = null
+      data.thickness = null
+      data.attenuationDistance = null
+      data.attenuationColor = null
+      
+      // Shader Effects
+      data.fresnelEffect = null
+      data.fresnelStrength = null
+      data.rimLighting = null
+      data.rimStrength = null
+      data.matcapReflection = null
+      data.environmentMapping = null
+      data.iridescence = null
+      data.iridescenceStrength = null
+      data.iridescenceThickness = null
+      
+      // Rendering Engine Settings
+      data.renderPipeline = null
+      data.computeShaders = null
+      data.cullingMethod = null
+      data.instancing = null
+      data.batching = null
+      data.occlusionCulling = null
+      data.frustumCulling = null
+      data.backfaceCulling = null
+      
+      // Memory and Buffer Settings
+      data.vertexBufferSize = null
+      data.indexBufferSize = null
+      data.uniformBufferSize = null
+      data.textureCacheSize = null
+      data.shaderCacheSize = null
+      data.geometryCacheSize = null
+      
+      // Advanced Rendering Settings
+      data.multisampling = null
+      data.depthPrepass = null
+      data.earlyZTest = null
+      data.conservativeRasterization = null
+      data.tessellationControlPoints = null
+      data.geometryShaderSupport = null
+      data.computeShaderWorkgroups = null
+      data.rayTracingSupport = null
+      
+      // Performance Tuning
+      data.gpuMemoryBudget = null
+      data.cpuThreadCount = null
+      data.asyncLoading = null
+      data.streamingTextures = null
+      data.dynamicLOD = null
+      data.adaptiveQuality = null
+    }
 
     // Basic settings
     this.ui = isNumber(data.ui) ? data.ui : isTouch ? 0.9 : 1
@@ -133,6 +209,41 @@ export class ClientPrefs extends System {
     // Tone mapping settings
     this.toneMappingMode = data.toneMappingMode ? data.toneMappingMode : 'aces' // none, linear, reinhard, cineon, aces
     this.toneMappingExposure = isNumber(data.toneMappingExposure) ? data.toneMappingExposure : 1.0
+    
+    // Shader Quality Settings
+    this.shaderQuality = data.shaderQuality ? data.shaderQuality : 'enhanced' // basic, standard, enhanced, aaa, ultra
+    this.materialDetail = data.materialDetail ? data.materialDetail : 'high' // low, medium, high, ultra
+    this.reflectionQuality = data.reflectionQuality ? data.reflectionQuality : 'high' // low, medium, high, ultra
+    this.subsurfaceScattering = isBoolean(data.subsurfaceScattering) ? data.subsurfaceScattering : true
+    this.parallaxMapping = isBoolean(data.parallaxMapping) ? data.parallaxMapping : false
+    this.tessellation = isBoolean(data.tessellation) ? data.tessellation : false
+    
+    // Advanced Material Properties
+    this.normalMapStrength = isNumber(data.normalMapStrength) ? data.normalMapStrength : 1.0 // 0.0-3.0
+    this.roughnessVariation = isNumber(data.roughnessVariation) ? data.roughnessVariation : 0.1 // 0.0-1.0
+    this.metallicVariation = isNumber(data.metallicVariation) ? data.metallicVariation : 0.1 // 0.0-1.0
+    this.emissiveIntensity = isNumber(data.emissiveIntensity) ? data.emissiveIntensity : 1.0 // 0.0-5.0
+    this.clearcoatStrength = isNumber(data.clearcoatStrength) ? data.clearcoatStrength : 0.0 // 0.0-1.0
+    this.clearcoatRoughness = isNumber(data.clearcoatRoughness) ? data.clearcoatRoughness : 0.1 // 0.0-1.0
+    this.anisotropy = isNumber(data.anisotropy) ? data.anisotropy : 0.0 // 0.0-1.0
+    this.anisotropyRotation = isNumber(data.anisotropyRotation) ? data.anisotropyRotation : 0.0 // 0.0-2π
+    this.sheenColor = data.sheenColor ? data.sheenColor : [1.0, 1.0, 1.0] // RGB array
+    this.sheenRoughness = isNumber(data.sheenRoughness) ? data.sheenRoughness : 0.5 // 0.0-1.0
+    this.transmission = isNumber(data.transmission) ? data.transmission : 0.0 // 0.0-1.0
+    this.thickness = isNumber(data.thickness) ? data.thickness : 1.0 // 0.0-10.0
+    this.attenuationDistance = isNumber(data.attenuationDistance) ? data.attenuationDistance : 1.0 // 0.0-10.0
+    this.attenuationColor = data.attenuationColor ? data.attenuationColor : [1.0, 1.0, 1.0] // RGB array
+    
+    // Shader Effects
+    this.fresnelEffect = isBoolean(data.fresnelEffect) ? data.fresnelEffect : false
+    this.fresnelStrength = isNumber(data.fresnelStrength) ? data.fresnelStrength : 1.0 // 0.0-5.0
+    this.rimLighting = isBoolean(data.rimLighting) ? data.rimLighting : false
+    this.rimStrength = isNumber(data.rimStrength) ? data.rimStrength : 1.0 // 0.0-5.0
+    this.matcapReflection = isBoolean(data.matcapReflection) ? data.matcapReflection : false
+    this.environmentMapping = isBoolean(data.environmentMapping) ? data.environmentMapping : true
+    this.iridescence = isBoolean(data.iridescence) ? data.iridescence : false
+    this.iridescenceStrength = isNumber(data.iridescenceStrength) ? data.iridescenceStrength : 1.0 // 0.0-5.0
+    this.iridescenceThickness = isNumber(data.iridescenceThickness) ? data.iridescenceThickness : 1.0 // 0.0-5.0
     
     // Audio settings
     this.music = isNumber(data.music) ? data.music : 1
@@ -174,6 +285,8 @@ export class ClientPrefs extends System {
     this.rayTracedReflections = isBoolean(data.rayTracedReflections) ? data.rayTracedReflections : false
     this.rayTracedGlobalIllumination = isBoolean(data.rayTracedGlobalIllumination) ? data.rayTracedGlobalIllumination : false
     this.rayTracedShadows = isBoolean(data.rayTracedShadows) ? data.rayTracedShadows : false
+    
+
     
     this.v = data.v
 
@@ -278,6 +391,41 @@ export class ClientPrefs extends System {
       rayTracedReflections: this.rayTracedReflections,
       rayTracedGlobalIllumination: this.rayTracedGlobalIllumination,
       rayTracedShadows: this.rayTracedShadows,
+      
+      // Shader Quality Settings
+      shaderQuality: this.shaderQuality,
+      materialDetail: this.materialDetail,
+      reflectionQuality: this.reflectionQuality,
+      subsurfaceScattering: this.subsurfaceScattering,
+      parallaxMapping: this.parallaxMapping,
+      tessellation: this.tessellation,
+      
+      // Advanced Material Properties
+      normalMapStrength: this.normalMapStrength,
+      roughnessVariation: this.roughnessVariation,
+      metallicVariation: this.metallicVariation,
+      emissiveIntensity: this.emissiveIntensity,
+      clearcoatStrength: this.clearcoatStrength,
+      clearcoatRoughness: this.clearcoatRoughness,
+      anisotropy: this.anisotropy,
+      anisotropyRotation: this.anisotropyRotation,
+      sheenColor: this.sheenColor,
+      sheenRoughness: this.sheenRoughness,
+      transmission: this.transmission,
+      thickness: this.thickness,
+      attenuationDistance: this.attenuationDistance,
+      attenuationColor: this.attenuationColor,
+      
+      // Shader Effects
+      fresnelEffect: this.fresnelEffect,
+      fresnelStrength: this.fresnelStrength,
+      rimLighting: this.rimLighting,
+      rimStrength: this.rimStrength,
+      matcapReflection: this.matcapReflection,
+      environmentMapping: this.environmentMapping,
+      iridescence: this.iridescence,
+      iridescenceStrength: this.iridescenceStrength,
+      iridescenceThickness: this.iridescenceThickness,
       
       v: this.v,
     })
@@ -505,7 +653,127 @@ export class ClientPrefs extends System {
     this.modify('rayTracedShadows', value)
   }
 
+  // v8: Comprehensive Shader and Rendering Engine Settings
+  // Shader Quality Settings
+  setShaderQuality(value) {
+    this.modify('shaderQuality', value)
+  }
+
+  setMaterialDetail(value) {
+    this.modify('materialDetail', value)
+  }
+
+  setReflectionQuality(value) {
+    this.modify('reflectionQuality', value)
+  }
+
+  setSubsurfaceScattering(value) {
+    this.modify('subsurfaceScattering', value)
+  }
+
+  setParallaxMapping(value) {
+    this.modify('parallaxMapping', value)
+  }
+
+  setTessellation(value) {
+    this.modify('tessellation', value)
+  }
+
+  // Advanced Material Properties
+  setNormalMapStrength(value) {
+    this.modify('normalMapStrength', value)
+  }
+
+  setRoughnessVariation(value) {
+    this.modify('roughnessVariation', value)
+  }
+
+  setMetallicVariation(value) {
+    this.modify('metallicVariation', value)
+  }
+
+  setEmissiveIntensity(value) {
+    this.modify('emissiveIntensity', value)
+  }
+
+  setClearcoatStrength(value) {
+    this.modify('clearcoatStrength', value)
+  }
+
+  setClearcoatRoughness(value) {
+    this.modify('clearcoatRoughness', value)
+  }
+
+  setAnisotropy(value) {
+    this.modify('anisotropy', value)
+  }
+
+  setAnisotropyRotation(value) {
+    this.modify('anisotropyRotation', value)
+  }
+
+  setSheenColor(value) {
+    this.modify('sheenColor', value)
+  }
+
+  setSheenRoughness(value) {
+    this.modify('sheenRoughness', value)
+  }
+
+  setTransmission(value) {
+    this.modify('transmission', value)
+  }
+
+  setThickness(value) {
+    this.modify('thickness', value)
+  }
+
+  setAttenuationDistance(value) {
+    this.modify('attenuationDistance', value)
+  }
+
+  setAttenuationColor(value) {
+    this.modify('attenuationColor', value)
+  }
+
+  // Shader Effects
+  setFresnelEffect(value) {
+    this.modify('fresnelEffect', value)
+  }
+
+  setFresnelStrength(value) {
+    this.modify('fresnelStrength', value)
+  }
+
+  setRimLighting(value) {
+    this.modify('rimLighting', value)
+  }
+
+  setRimStrength(value) {
+    this.modify('rimStrength', value)
+  }
+
+  setMatcapReflection(value) {
+    this.modify('matcapReflection', value)
+  }
+
+  setEnvironmentMapping(value) {
+    this.modify('environmentMapping', value)
+  }
+
+  setIridescence(value) {
+    this.modify('iridescence', value)
+  }
+
+  setIridescenceStrength(value) {
+    this.modify('iridescenceStrength', value)
+  }
+
+  setIridescenceThickness(value) {
+    this.modify('iridescenceThickness', value)
+  }
+
   destroy() {
-    // ...
+    this.persist()
   }
 }

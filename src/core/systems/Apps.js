@@ -8,6 +8,52 @@ import { Layers } from '../extras/Layers'
 import { ControlPriorities } from '../extras/ControlPriorities'
 import { warn } from '../extras/warn'
 
+// 🛡️ FIXED: Add missing fileRemaps definition
+const fileRemaps = {
+  model: (field) => {
+    // Handle model file type remapping
+    if (field.value?.url) {
+      field.url = field.value.url
+      field.name = field.value.name
+    }
+  },
+  avatar: (field) => {
+    // Handle avatar file type remapping
+    if (field.value?.url) {
+      field.url = field.value.url
+      field.name = field.value.name
+    }
+  },
+  texture: (field) => {
+    // Handle texture file type remapping
+    if (field.value?.url) {
+      field.url = field.value.url
+      field.name = field.value.name
+    }
+  },
+  audio: (field) => {
+    // Handle audio file type remapping
+    if (field.value?.url) {
+      field.url = field.value.url
+      field.name = field.value.name
+    }
+  },
+  hdr: (field) => {
+    // Handle HDR file type remapping
+    if (field.value?.url) {
+      field.url = field.value.url
+      field.name = field.value.name
+    }
+  },
+  emote: (field) => {
+    // Handle emote file type remapping
+    if (field.value?.url) {
+      field.url = field.value.url
+      field.name = field.value.name
+    }
+  }
+}
+
 const isBrowser = typeof window !== 'undefined'
 
 const internalEvents = [
