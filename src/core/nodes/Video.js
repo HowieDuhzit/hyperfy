@@ -100,6 +100,24 @@ export class Video extends Node {
     this._loading = true
   }
 
+  // CRITICAL WebGPU FIX: Check if video is truly ready for WebGPU VideoFrame creation
+  isVideoReadyForWebGPU(instance) {
+    if (!instance || !instance.texture || !instance.texture.image) {
+      return false
+    }
+    
+    const video = instance.texture.image
+    
+    // Check all the conditions that WebGPU requires for VideoFrame creation
+    return (
+      video.readyState >= 2 && // HAVE_CURRENT_DATA or higher
+      video.videoWidth > 0 &&
+      video.videoHeight > 0 &&
+      !video.ended &&
+      video.currentTime >= 0
+    )
+  }
+
   async mount() {
     this.needsRebuild = false
     if (this.ctx.world.network.isServer) return
@@ -162,8 +180,8 @@ export class Video extends Node {
         material.side = this._doubleside ? THREE.DoubleSide : THREE.FrontSide
         
         // Apply video texture with fit logic and offset support
-        // Only apply texture if video is ready and texture exists
-        if (this.instance?.ready && this.instance?.texture) {
+        // CRITICAL WebGPU FIX: Only apply texture if video is truly ready for WebGPU
+        if (this.instance?.ready && this.instance?.texture && this.isVideoReadyForWebGPU(this.instance)) {
           try {
             material.map = this.instance.texture
             uniforms.uMap.value = this.instance.texture
@@ -212,12 +230,25 @@ export class Video extends Node {
                       material.map.needsUpdate = true
           } catch (error) {
             console.warn('[Video] WebGPU initial texture assignment failed:', error)
+            console.warn('[Video] Video element state:', {
+              readyState: this.instance?.texture?.image?.readyState,
+              videoWidth: this.instance?.texture?.image?.videoWidth,
+              videoHeight: this.instance?.texture?.image?.videoHeight,
+              ended: this.instance?.texture?.image?.ended,
+              currentTime: this.instance?.texture?.image?.currentTime
+            })
             // Fall back to placeholder
             material.color.set(this._color || 'black')
             material.map = null
           }
         } else {
           // Video not ready yet - show placeholder color
+          console.log('[Video] WebGPU: Video not ready yet, using placeholder', {
+            hasInstance: !!this.instance,
+            instanceReady: this.instance?.ready,
+            hasTexture: !!this.instance?.texture,
+            webGPUReady: this.instance ? this.isVideoReadyForWebGPU(this.instance) : false
+          })
           material.color.set(this._color || 'black')
           material.map = null
         }
@@ -529,7 +560,7 @@ export class Video extends Node {
       const renderer = this.ctx.world.graphics?.renderer
       const isWebGPU = renderer && (renderer.isWebGPURenderer || renderer.constructor.name === 'WebGPURenderer')
       
-      if (isWebGPU && (!this.mesh.material.map || this.mesh.material.map !== this.instance.texture)) {
+      if (isWebGPU && (!this.mesh.material.map || this.mesh.material.map !== this.instance.texture) && this.isVideoReadyForWebGPU(this.instance)) {
         try {
           // Video is now ready, update the material texture
           this.mesh.material.map = this.instance.texture
@@ -568,7 +599,14 @@ export class Video extends Node {
         
           this.mesh.material.map.needsUpdate = true
         } catch (error) {
-          console.warn('[Video] WebGPU texture assignment failed:', error)
+          console.warn('[Video] WebGPU texture assignment failed in commit:', error)
+          console.warn('[Video] Video element state:', {
+            readyState: this.instance?.texture?.image?.readyState,
+            videoWidth: this.instance?.texture?.image?.videoWidth,
+            videoHeight: this.instance?.texture?.image?.videoHeight,
+            ended: this.instance?.texture?.image?.ended,
+            currentTime: this.instance?.texture?.image?.currentTime
+          })
           // Keep placeholder material without texture
           this.mesh.material.map = null
           this.mesh.material.color.set(this._color || 'black')

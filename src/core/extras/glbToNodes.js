@@ -11,13 +11,12 @@ export function glbToNodes(glb, world) {
   
   console.log(`🔧 Processing GLB with ${isWebGPU ? 'WebGPU' : 'WebGL'} compatibility mode`)
   
-  // MULTI-MESH FIX: Analyze GLB structure to determine linking strategy
-  const meshCount = countMeshes(glb.scene)
-  const hasMultipleMeshes = meshCount > 1
-  const forceNonLinked = isWebGPU && hasMultipleMeshes // WebGPU multi-mesh objects should not be linked
+  // CRITICAL FIX: Analyze GLB structure to determine consistent linking strategy
+  const glbLinkingStrategy = analyzeGLBLinkingStrategy(glb)
   
-  if (forceNonLinked) {
-    console.log(`🔧 Multi-mesh GLB detected (${meshCount} meshes) - forcing non-linked rendering for WebGPU compatibility`)
+  if (glbLinkingStrategy.hasMultipleMeshes) {
+    console.log(`🔧 Multi-mesh GLB detected (${glbLinkingStrategy.meshCount} meshes) - using consistent linking: ${glbLinkingStrategy.shouldLink ? 'LINKED (InstancedMesh)' : 'NON-LINKED (Individual Meshes)'}`)
+    console.log(`   → This ensures all meshes maintain transform hierarchy when moved as a rigidbody`)
   }
   
   function registerNode(name, data) {
@@ -154,12 +153,11 @@ export function glbToNodes(glb, world) {
           ensureConsistentMaterial(object3d.material, world, isWebGPU)
         }
         
-        // MULTI-MESH FIX: Determine linking based on GLB structure and renderer
-        let shouldLink = !hasMorphTargets && !object3d.material.transparent
-        
-        if (forceNonLinked) {
-          shouldLink = false // Force non-linked for WebGPU multi-mesh objects
-        }
+                 // CRITICAL FIX: Use consistent linking strategy for all meshes in this GLB
+         // This ensures all meshes in a multi-mesh GLB move together as a unit
+         const shouldLink = glbLinkingStrategy.hasMultipleMeshes 
+           ? glbLinkingStrategy.shouldLink 
+           : (!hasMorphTargets && !object3d.material.transparent)
         
         const node = registerNode('mesh', {
           id: object3d.name,
@@ -607,23 +605,6 @@ function addWind(mesh, world) {
   }
 }
 
-// Helper function to count meshes in GLB scene
-function countMeshes(object3d) {
-  let count = 0
-  
-  if (object3d.type === 'Mesh') {
-    count++
-  }
-  
-  if (object3d.children) {
-    for (const child of object3d.children) {
-      count += countMeshes(child)
-    }
-  }
-  
-  return count
-}
-
 function createWindMaterial(originalMaterial, windUniforms, height, graphics) {
   try {
     // Create WebGPU-compatible wind material using CustomShaderMaterial
@@ -728,6 +709,49 @@ function createWindMaterial(originalMaterial, windUniforms, height, graphics) {
     // Fallback: return original material with wind flag
     originalMaterial.hasWind = true
     return originalMaterial
+  }
+}
+
+//  CRITICAL: Analyze GLB structure to determine consistent linking strategy
+function analyzeGLBLinkingStrategy(glb) {
+  const meshes = []
+  
+  // Collect all standard meshes (excluding terrain and special cases)
+  glb.scene.traverse(object3d => {
+    if (object3d.type === 'Mesh') {
+      const props = object3d.userData || {}
+      // Skip terrain and special meshes - they have their own linking logic
+      if (!props.terrain && !props.exp_splatmap) {
+        meshes.push({
+          object3d,
+          hasMorphTargets: object3d.morphTargetDictionary || object3d.morphTargetInfluences?.length > 0,
+          isTransparent: object3d.material && object3d.material.transparent
+        })
+      }
+    }
+  })
+  
+  const meshCount = meshes.length
+  const hasMultipleMeshes = meshCount > 1
+  
+  if (!hasMultipleMeshes) {
+    // Single mesh - use normal per-mesh logic
+    return {
+      meshCount,
+      hasMultipleMeshes: false,
+      shouldLink: true // This won't be used since hasMultipleMeshes is false
+    }
+  }
+  
+  // Multi-mesh GLB: FORCE ALL to be non-linked to maintain hierarchy
+  // InstancedMesh and individual Mesh objects can't maintain proper parent-child relationships
+  // when mixed within the same GLB object, so all multi-mesh GLBs must use individual meshes
+  console.log('🔧 Multi-mesh GLB: Forcing all meshes to be non-linked to maintain transform hierarchy')
+  
+  return {
+    meshCount,
+    hasMultipleMeshes: true,
+    shouldLink: false // ALL multi-mesh GLBs use individual meshes (insertSingle)
   }
 }
 
