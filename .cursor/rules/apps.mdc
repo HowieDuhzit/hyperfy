@@ -1,0 +1,253 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+I'll analyze these scripts and create a comprehensive set of syntax rules based on the Hyperfy app ecosystem. Let me break this down into key sections:
+
+# Hyperfy App Syntax Rules
+
+## 1. Basic App Structure
+
+### Configuration
+```javascript
+app.configure([
+  
+]);
+```
+
+- Configuration must be defined at the top of the app
+- Uses array of configuration objects
+- Each config object must have `key`, `type`, and `label` properties
+- Common config types: `text`, `number`, `switch`, `file`, `color`, `range`, `dropdown`, `buttons`
+
+### Core App Structure
+Two main patterns are used:
+
+1. Object Export Pattern:
+```javascript
+({
+  init() {
+    // Initialization code
+  },
+  update(dt) {
+    // Update loop
+  }
+})
+```
+
+2. Direct Function Pattern:
+```javascript
+export default function AppName(props) {
+  // App code
+}
+```
+
+## 2. Environment Detection
+
+Always check environment before specific logic:
+```javascript
+if (world.isServer) {
+  // Server-side code
+}
+
+if (world.isClient) {
+  // Client-side code
+}
+```
+
+## 3. State Management
+
+### Server State
+```javascript
+if (world.isServer) {
+  app.state.ready = true
+  app.state.someData = value
+  app.send('state', app.state)
+}
+```
+
+### Client State
+```javascript
+if (world.isClient) {
+  if (app.state.ready) {
+    init(app.state)
+  } else {
+    app.on('state', init)
+  }
+}
+```
+
+## 4. Event Handling
+
+### Event Registration
+```javascript
+app.on('eventName', (data) => {
+  // Handle event
+})
+
+world.on('eventName', (data) => {
+  // Handle world event
+})
+```
+
+### Event Emission
+```javascript
+app.send('eventName', data)  // Send to specific context
+app.emit('eventName', data)  // Emit to world
+world.emit('eventName', data)  // Global emission
+```
+
+## 5. Object Creation
+
+### Basic Objects
+```javascript
+const object = app.create('type', {
+  // Properties
+})
+app.add(object)
+```
+
+Common types:
+- `mesh`
+- `ui`
+- `uitext`
+- `uiview`
+- `audio`
+- `action`
+- `rigidbody`
+- `collider`
+- `particle`
+- `material`
+
+### UI Creation
+```javascript
+const ui = app.create('ui', {
+  width: number,
+  height: number,
+  backgroundColor: string,
+  borderRadius: number,
+  padding: number,
+  pivot: string,
+  billboard: string,
+  position: [x, y, z]
+})
+```
+
+## 6. Physics System
+
+### Rigidbody Setup
+```javascript
+const body = app.create('rigidbody')
+body.type = 'static' | 'dynamic' | 'kinematic'
+body.mass = number
+body.friction = number
+body.restitution = number
+```
+
+### Collider Setup
+```javascript
+const collider = app.create('collider')
+collider.type = 'box' | 'sphere' | 'geometry'
+collider.trigger = boolean
+collider.setSize(x, y, z)
+```
+
+## 7. Networking
+
+### Network State Sync
+```javascript
+const SEND_RATE = 1 / 60  // Standard rate
+let lastSent = 0
+
+app.on('update', delta => {
+  lastSent += delta
+  if (lastSent >= SEND_RATE) {
+    app.send('update', state)
+    lastSent = 0
+  }
+})
+```
+
+### Network Ownership
+```javascript
+body.setNetworkOwner(playerId)
+body.networked = true
+```
+
+## 8. Animation System
+
+### Emotes and Effects
+```javascript
+player.applyEffect({
+  emote: string,
+  duration: number,
+  turn: boolean,
+  freeze: boolean,
+  snare: number,
+  onEnd: () => {}
+})
+```
+
+## 9. Vector Math
+
+### Vector Operations
+```javascript
+const v1 = new Vector3()
+const q1 = new Quaternion()
+const e1 = new Euler(0, 0, 0, 'YXZ')
+```
+
+### Transform Handling
+```javascript
+object.position.set(x, y, z)
+object.rotation.set(x, y, z)
+object.quaternion.setFromEuler(euler)
+object.scale.setScalar(value)
+```
+
+## 10. Asset Handling
+
+### Asset Configuration
+```javascript
+{
+  key: 'assetName',
+  type: 'file',
+  kind: 'model' | 'audio' | 'texture' | 'emote',
+  label: 'Asset Label'
+}
+```
+
+### Asset Usage
+```javascript
+const url = props.asset?.url
+mesh.src = url
+audio.src = url
+```
+
+## 11. Error Handling
+
+Always use try-catch for critical operations:
+```javascript
+try {
+  // Critical operation
+} catch (error) {
+  console.error('Operation failed:', error)
+}
+```
+
+## 12. Cleanup
+
+Proper cleanup in components:
+```javascript
+app.on('cleanup', () => {
+  // Remove listeners
+  world.off('eventName')
+  app.off('eventName')
+  
+  // Clean up resources
+  app.remove(object)
+})
+```
+
+These rules form the foundation of Hyperfy app development. Each app should follow these patterns for consistency and reliability. The syntax is designed to be modular and event-driven, with clear separation between client and server logic.

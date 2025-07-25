@@ -1,0 +1,472 @@
+---
+description: Syntax for Hyperfy Apps
+globs: 
+alwaysApply: true
+---
+ # 🌐 Hyperfy App API Reference
+
+```
+╔══════════════════════════════════════╗
+║        HYP APP API REFERENCE         ║
+╚══════════════════════════════════════╝
+```
+
+## Introduction
+
+Hyperfy is a web-based multiplayer collaborative world engine for building 3D games and experiences accessible in the browser. The platform allows world admins to drag and drop GLB models into the world in realtime and manipulate them directly.
+
+### Core Concepts
+
+- Each GLB model dropped into the world becomes an "app"
+- Every app consists of:
+  - A GLB model (required)
+  - An optional JavaScript script
+  - Additional config/assets via props
+- Everything in a world is an app
+- Scripts run in an isolated runtime environment
+- Scripts execute on both server and clients
+- Execution flow:
+  1. Server executes scripts on boot
+  2. Clients execute scripts after receiving initial snapshot
+  3. When scripts are edited by a builder:
+     - Changes execute instantly on client
+     - Server is notified to reboot with new script
+
+### App Structure
+
+Scripts can access all nodes in the GLB model:
+```javascript
+// If your mesh is named "Sword" in Blender
+const sword = app.get('Sword')
+```
+
+You can use either the global `app` format:
+
+```javascript
+app.configure(() => {
+  return [
+    // Configuration options...
+  ]
+})
+
+// Create objects
+const myObject = app.create('mesh')
+app.add(myObject)
+
+// Set up event handlers
+app.on('update', (dt) => {
+  // Update logic
+})
+```
+
+### SES Environment Restrictions
+
+Hyperfy uses SES (Secure ECMAScript) for security, which imposes specific syntax restrictions:
+
+- **Never use ES6 `export` or `import` syntax** - SES will throw errors
+- **Always wrap apps in parentheses** when using the object return format
+- **Use only approved global APIs and objects**
+- **No direct `eval()` or `new Function()` usage**
+- **Avoid using browser-specific APIs** that aren't explicitly provided
+- **setTimeout is not a function**
+- **world.onUpdate is not a function**
+
+## Global APIs
+
+### The `world` Global
+
+The `world` global provides access to world-related functionality:
+
+#### Properties
+
+- **`.isServer`**: Boolean - True if code is executing on server
+- **`.isClient`**: Boolean - True if code is executing on client
+
+#### Methods
+
+- **`.add(node)`**: Adds a node into world-space
+- **`.remove(node)`**: Removes a node from world space
+- **`.attach(node)`**: Adds node to world-space while maintaining its transform
+- **`.on(event, callback)`**: Listens to world events from other apps
+- **`.off(event, callback)`**: Cancels a world event listener
+- **`.getTime()`**: Returns seconds since server boot (synced on clients)
+- **`.chat(msg, broadcast)`**: Posts chat message with optional broadcast
+- **`.getPlayer(playerId)`**: Returns handle to player (local player if no ID)
+- **`.getPlayers()`**: Returns array of all current players
+- **`.createLayerMask(...layers)`**: Creates collision layer mask
+- **`.raycast(origin, direction, maxDistance, layerMask)`**: Physics raycast
+- **`.get(key)`**: Gets value from key-value storage (server only)
+- **`.set(key, value)`**: Sets value in key-value storage (server only)
+
+### The `app` Global
+
+The `app` global provides access to the app instance and core functionality:
+
+#### Properties
+
+- **`.instanceId`**: String - Unique ID for this app instance
+- **`.state`**: Object - App state (synced to clients on connect)
+- **`.props`**: Object - Configuration properties
+
+#### Methods
+
+- **`.on(event, callback)`**: Listens to app events from other contexts
+- **`.off(event, callback)`**: Removes event listener
+- **`.send(event, data)`**: Sends event to opposite context
+- **`.send(playerId, event, data)`**: Sends event to specific player
+- **`.emit(event, data)`**: Emits world event to other apps
+- **`.get(name)`**: Returns node by name from hierarchy
+- **`.create(name, data)`**: Creates new node
+- **`.control(options)`**: Creates input/camera control handle
+- **`.configure(fields)`**: Defines prop configuration UI
+
+## Node System
+
+### Base Node Class
+
+All nodes inherit from the base Node class:
+
+#### Properties
+
+- **`.id`**: String - Immutable node ID (matches Blender name for GLB)
+- **`.name`**: String - Node type (mesh, action, rigidbody, etc)
+- **`.position`**: Vector3 - Local position
+- **`.quaternion`**: Quaternion - Local rotation as quaternion
+- **`.rotation`**: Euler - Local rotation as euler angles
+- **`.scale`**: Vector3 - Local scale
+- **`.matrixWorld`**: Matrix4 - World transform matrix
+- **`.active`**: Boolean - Whether node is active
+- **`.parent`**: Node - Parent node if any
+- **`.children`**: Array[Node] - Child nodes
+- **`.cursor`**: String - Cursor style when hovering (for UI)
+
+#### Methods
+
+- **`.add(childNode)`**: Adds child node
+- **`.remove(childNode)`**: Removes child node
+- **`.clone(recursive)`**: Clones node
+- **`.onPointerEnter`**: Function - Called when pointer enters
+- **`.onPointerLeave`**: Function - Called when pointer leaves
+- **`.onPointerDown`**: Function - Called on pointer press
+- **`.onPointerUp`**: Function - Called on pointer release
+
+## Node Types
+
+### UI Components
+
+#### UI Node
+Creates a UI panel in 3D space.
+
+```javascript
+const ui = app.create('ui')
+ui.width = 300
+ui.height = 200
+ui.backgroundColor = 'rgba(0, 15, 30, 0.8)'
+ui.borderRadius = 20
+ui.padding = 15
+ui.billboard = 'full'
+ui.pivot = 'center'
+ui.justifyContent = 'center'
+ui.alignItems = 'center'
+ui.gap = 10
+app.add(ui)
+```
+
+Properties:
+- **`.width`**: Number - Width in pixels
+- **`.height`**: Number - Height in pixels
+- **`.backgroundColor`**: String - Background color
+- **`.borderRadius`**: Number - Corner radius
+- **`.padding`**: Number - Inner padding
+- **`.billboard`**: String - Camera facing mode
+- **`.pivot`**: String - Anchor point
+- **`.justifyContent`**: String - Flex justify
+- **`.alignItems`**: String - Flex align
+- **`.gap`**: Number - Child spacing
+
+#### UIText Node
+Displays text in UI.
+
+```javascript
+const text = app.create('uitext')
+text.value = 'Hello World'
+text.color = '#00ffaa'
+text.fontSize = 24
+text.fontWeight = 'bold'
+ui.add(text)
+```
+
+Properties:
+- **`.value`**: String - Text content
+- **`.color`**: String - Text color
+- **`.fontSize`**: Number - Font size
+- **`.fontWeight`**: String/Number - Font weight
+
+### Physics Components
+
+#### RigidBody Node
+Physical body for physics simulation.
+
+```javascript
+const body = app.create('rigidbody')
+body.type = 'dynamic'
+body.mass = 1
+app.add(body)
+```
+
+Properties:
+- **`.type`**: String - Body type (static/dynamic/kinematic)
+- **`.mass`**: Number - Physics mass
+
+#### Collider Node
+Collision shape for physics.
+
+```javascript
+const collider = app.create('collider')
+collider.type = 'box'
+collider.setSize(1, 1, 1)
+body.add(collider)
+```
+
+Properties:
+- **`.type`**: String - Shape type (box/sphere/geometry)
+- **`.trigger`**: Boolean - Is trigger volume
+
+### Audio Components
+
+#### Audio Node
+Spatial audio source.
+
+```javascript
+const audio = app.create('audio')
+audio.src = props.sound?.url
+audio.loop = true
+audio.spatial = true
+audio.volume = 0.8
+app.add(audio)
+```
+
+Properties:
+- **`.src`**: String - Audio URL
+- **`.loop`**: Boolean - Should loop
+- **`.spatial`**: Boolean - Is positional
+- **`.volume`**: Number - Volume level
+
+Methods:
+- **`.play()`**: Starts playback
+- **`.pause()`**: Pauses playback
+- **`.stop()`**: Stops playback
+
+### Visual Components
+
+#### Mesh Node
+3D geometry renderer.
+
+```javascript
+const mesh = app.create('mesh')
+mesh.castShadow = true
+mesh.receiveShadow = true
+app.add(mesh)
+```
+
+Properties:
+- **`.castShadow`**: Boolean - Casts shadows
+- **`.receiveShadow`**: Boolean - Receives shadows
+
+#### Material Node
+Surface appearance properties.
+
+```javascript
+const material = app.create('material')
+material.color.set('#00ffaa')
+material.emissive.set('#00ffaa')
+material.metalness = 0.7
+material.roughness = 0.2
+```
+
+Properties:
+- **`.color`**: Color - Base color
+- **`.emissive`**: Color - Glow color
+- **`.metalness`**: Number - Metallic factor
+- **`.roughness`**: Number - Surface roughness
+
+## Configuration System
+
+Apps can expose configuration options through `app.configure()`:
+
+```javascript
+app.configure(() => {
+  return [
+    {
+      key: 'title',
+      type: 'text',
+      label: 'Title',
+      initial: 'Default Title'
+    },
+    {
+      key: 'audioFile',
+      type: 'file',
+      kind: 'audio',
+      label: 'Sound Effect'
+    },
+    {
+      type: 'section',
+      key: 'appearance',
+      label: 'Appearance'
+    },
+    {
+      type: 'switch',
+      key: 'theme',
+      label: 'Theme',
+      options: [
+        { value: 'light', label: 'Light' },
+        { value: 'dark', label: 'Dark' }
+      ]
+    }
+  ]
+})
+```
+
+### Field Types
+
+- **text**: Simple text input
+- **textarea**: Multi-line text
+- **number**: Numeric input
+- **switch**: Multiple choice
+- **color**: Color picker
+- **file**: File upload
+- **section**: Group header
+
+### Accessing Values
+
+Configuration values are accessed through `app.props`:
+
+```javascript
+const title = app.props.title || 'Default'
+const audioUrl = app.props.audioFile?.url
+```
+
+## Best Practices
+
+### Performance
+- Use object pooling for frequently created objects
+- Dispose of resources properly
+- Use LOD (Level of Detail) for complex models
+- Optimize physics colliders
+- Cache frequently accessed values
+
+### Networking
+- Keep network messages small
+- Use appropriate update rates
+- Handle network latency gracefully
+- Implement proper state synchronization
+
+### Resource Management
+- Clean up event listeners
+- Dispose of materials and geometries
+- Remove nodes when no longer needed
+- Handle asset loading efficiently
+
+### Security
+- Never use eval() or new Function()
+- Validate all input data
+- Use appropriate access controls
+- Follow SES restrictions
+
+## Examples
+
+
+### Client-Server Communication
+```javascript
+// Client-side
+if (world.isClient) {
+  const button = app.create('uitext')
+  button.value = '[ CLICK ME ]'
+  button.onPointerDown = () => {
+    app.send('button:click')
+  }
+  app.add(button)
+}
+
+// Server-side
+if (world.isServer) {
+  app.on('button:click', () => {
+    world.chat('Button was clicked!')
+  })
+}
+```
+
+### Physics Interaction
+```javascript
+const body = app.create('rigidbody')
+body.type = 'dynamic'
+body.mass = 1
+
+const collider = app.create('collider')
+collider.type = 'box'
+collider.setSize(1, 1, 1)
+body.add(collider)
+
+app.add(body)
+
+// Apply force on click
+body.onPointerDown = () => {
+  body.applyImpulse(new Vector3(0, 5, 0))
+}
+```
+
+### Audio Player
+```javascript
+app.configure(() => {
+  return [{
+    key: 'sound',
+    type: 'file',
+    kind: 'audio',
+    label: 'Sound File'
+  }]
+})
+
+const audio = app.create('audio')
+audio.src = app.props.sound?.url
+audio.loop = true
+audio.spatial = true
+
+const button = app.create('uitext')
+button.value = '[ PLAY ]'
+button.onPointerDown = () => audio.play()
+button.onPointerUp = () => audio.pause()
+
+app.add(audio)
+app.add(button)
+```
+
+### UI Panel
+```javascript
+const ui = app.create('ui')
+ui.width = 300
+ui.height = 200
+ui.backgroundColor = 'rgba(0, 15, 30, 0.8)'
+ui.borderRadius = 20
+ui.padding = 15
+ui.billboard = 'full'
+
+const title = app.create('uitext')
+title.value = 'Hello World'
+title.color = '#00ffaa'
+title.fontSize = 24
+ui.add(title)
+
+const button = app.create('uitext')
+button.value = '[ CLICK ME ]'
+button.color = '#ffffff'
+button.onPointerDown = () => {
+  button.color = '#00ffaa'
+}
+button.onPointerUp = () => {
+  button.color = '#ffffff'
+  // Handle click
+}
+ui.add(button)
+
+app.add(ui)
+```

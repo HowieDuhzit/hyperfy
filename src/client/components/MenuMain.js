@@ -13,6 +13,7 @@ import {
 } from './Menu'
 import { usePermissions } from './usePermissions'
 import { useFullscreen } from './useFullscreen'
+import GraphicsSettingsPane from './GraphicsSettingsPane'
 
 export function MenuMain({ world }) {
   const [pages, setPages] = useState(() => ['index'])
@@ -30,7 +31,8 @@ export function MenuMain({ world }) {
   let Page
   if (page === 'index') Page = MenuMainIndex
   if (page === 'ui') Page = MenuMainUI
-  if (page === 'graphics') Page = MenuMainGraphics
+  if (page === 'graphics') Page = props => <MenuMainGraphics {...props} push={push} />
+  if (page === 'graphics-advanced') Page = props => <MenuMainGraphicsAdvanced {...props} pop={pop} world={world} />
   if (page === 'audio') Page = MenuMainAudio
   if (page === 'world') Page = MenuMainWorld
   return <Page world={world} pop={pop} push={push} />
@@ -119,11 +121,18 @@ const shadowOptions = [
   { label: 'Med', value: 'med' },
   { label: 'High', value: 'high' },
 ]
-function MenuMainGraphics({ world, pop, push }) {
+function MenuMainGraphics({ world, push }) {
   const [dpr, setDPR] = useState(world.prefs.dpr)
   const [shadows, setShadows] = useState(world.prefs.shadows)
   const [postprocessing, setPostprocessing] = useState(world.prefs.postprocessing)
   const [bloom, setBloom] = useState(world.prefs.bloom)
+  const [ao, setAO] = useState(world.prefs.ao)
+  
+  // Get graphics stats for performance display
+  const graphicsStats = useMemo(() => {
+    return world.graphics?.getGraphicsStats?.() || {}
+  }, [world.graphics])
+  
   const dprOptions = useMemo(() => {
     const width = world.graphics.width
     const height = world.graphics.height
@@ -142,52 +151,113 @@ function MenuMainGraphics({ world, pop, push }) {
     if (dpr >= 3) add('3x', dpr)
     return options
   }, [])
+  
   useEffect(() => {
     const onChange = changes => {
       if (changes.dpr) setDPR(changes.dpr.value)
       if (changes.shadows) setShadows(changes.shadows.value)
       if (changes.postprocessing) setPostprocessing(changes.postprocessing.value)
       if (changes.bloom) setBloom(changes.bloom.value)
+      if (changes.ao) setAO(changes.ao.value)
     }
     world.prefs.on('change', onChange)
     return () => {
       world.prefs.off('change', onChange)
     }
   }, [])
+  
+  // Performance summary
+  const currentFPS = graphicsStats.performance?.currentFPS || 0
+  const frameTime = graphicsStats.performance?.lastFrameTime || 0
+  const drawCalls = graphicsStats.renderer?.calls || 0
+  
   return (
-    <Menu title='Menu'>
-      <MenuItemBack hint='Go back to the main menu' onClick={pop} />
-      <MenuItemSwitch
-        label='Resolution'
-        hint='Change your display resolution'
-        options={dprOptions}
-        value={dpr}
-        onChange={dpr => world.prefs.setDPR(dpr)}
-      />
-      <MenuItemSwitch
-        label='Shadows'
-        hint='Change the quality of shadows in the world'
-        options={shadowOptions}
-        value={shadows}
-        onChange={shadows => world.prefs.setShadows(shadows)}
-      />
-      <MenuItemToggle
-        label='Postprocessing'
-        hint='Enable or disable all postprocessing effects'
-        trueLabel='On'
-        falseLabel='Off'
-        value={postprocessing}
-        onChange={postprocessing => world.prefs.setPostprocessing(postprocessing)}
-      />
-      <MenuItemToggle
-        label='Bloom'
-        hint='Enable or disable the bloom effect'
-        trueLabel='On'
-        falseLabel='Off'
-        value={bloom}
-        onChange={bloom => world.prefs.setBloom(bloom)}
-      />
-    </Menu>
+    <div style={{ padding: 24 }}>
+      <Menu title='Menu'>
+        <MenuItemBack hint='Go back to the main menu' onClick={pop} />
+        
+        {/* Performance Summary */}
+        <div style={{
+          background: 'rgba(0, 0, 0, 0.1)',
+          borderRadius: '8px',
+          padding: '12px',
+          margin: '8px 0',
+          fontSize: '12px'
+        }}>
+          <div style={{ fontWeight: 'bold', marginBottom: '8px', color: '#00ffaa' }}>
+            Performance
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <div>
+              <div style={{ fontSize: '16px', fontWeight: 'bold' }}>{currentFPS.toFixed(0)}</div>
+              <div style={{ fontSize: '10px', opacity: 0.7 }}>FPS</div>
+            </div>
+            <div>
+              <div style={{ fontSize: '16px', fontWeight: 'bold' }}>{frameTime.toFixed(1)}</div>
+              <div style={{ fontSize: '10px', opacity: 0.7 }}>Frame Time (ms)</div>
+            </div>
+            <div>
+              <div style={{ fontSize: '16px', fontWeight: 'bold' }}>{drawCalls}</div>
+              <div style={{ fontSize: '10px', opacity: 0.7 }}>Draw Calls</div>
+            </div>
+          </div>
+        </div>
+        
+        <MenuItemSwitch
+          label='Resolution'
+          hint='Change your display resolution'
+          options={dprOptions}
+          value={dpr}
+          onChange={dpr => world.prefs.setDPR(dpr)}
+        />
+        <MenuItemSwitch
+          label='Shadows'
+          hint='Change the quality of shadows in the world'
+          options={shadowOptions}
+          value={shadows}
+          onChange={shadows => world.prefs.setShadows(shadows)}
+        />
+        <MenuItemToggle
+          label='Postprocessing'
+          hint='Enable or disable all postprocessing effects'
+          trueLabel='On'
+          falseLabel='Off'
+          value={postprocessing}
+          onChange={postprocessing => world.prefs.setPostprocessing(postprocessing)}
+        />
+        <MenuItemToggle
+          label='Bloom'
+          hint='Enable or disable the bloom effect'
+          trueLabel='On'
+          falseLabel='Off'
+          value={bloom}
+          onChange={bloom => world.prefs.setBloom(bloom)}
+        />
+        <MenuItemToggle
+          label='Ambient Occlusion'
+          hint='Enable or disable ambient occlusion effects'
+          trueLabel='On'
+          falseLabel='Off'
+          value={ao}
+          onChange={ao => world.prefs.setAO(ao)}
+        />
+        {/* Advanced Graphics Settings Button navigates to new page */}
+        <MenuItemBtn
+          label='Advanced Graphics Settings'
+          hint='Access detailed graphics settings and performance options'
+          onClick={() => push('graphics-advanced')}
+        />
+      </Menu>
+    </div>
+  )
+}
+
+function MenuMainGraphicsAdvanced({ world, pop }) {
+  return (
+    <div className="menu-main-graphics-advanced">
+      <button className="back-btn" onClick={pop}>&larr; Back</button>
+      <GraphicsSettingsPane world={world} onClose={pop} />
+    </div>
   )
 }
 
