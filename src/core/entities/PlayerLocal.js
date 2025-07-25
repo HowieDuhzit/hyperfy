@@ -39,6 +39,20 @@ const m1 = new THREE.Matrix4()
 const m2 = new THREE.Matrix4()
 const m3 = new THREE.Matrix4()
 
+const gazeTiltAngle = 10 * DEG2RAD
+const gazeTiltAxis = new THREE.Vector3(1, 0, 0) // X-axis for pitch
+
+// TODO: de-dup createVRMFactory.js has a copy
+const Modes = {
+  IDLE: 0,
+  WALK: 1,
+  RUN: 2,
+  JUMP: 3,
+  FALL: 4,
+  FLY: 5,
+  TALK: 6,
+}
+
 export class PlayerLocal extends Entity {
   constructor(world, data, local) {
     super(world, data, local)
@@ -74,7 +88,6 @@ export class PlayerLocal extends Entity {
     this.falling = false
 
     this.moveDir = new THREE.Vector3()
-    this.moveDirRaw = new THREE.Vector3()
     this.moving = false
 
     this.firstPerson = false
@@ -89,6 +102,10 @@ export class PlayerLocal extends Entity {
       actor: null,
       prevTransform: new THREE.Matrix4(),
     }
+
+    this.mode = Modes.IDLE
+    this.axis = new THREE.Vector3()
+    this.gaze = new THREE.Vector3()
 
     this.speaking = false
 
@@ -266,6 +283,7 @@ export class PlayerLocal extends Entity {
         if (!this.stick && touch.position.x < this.control.screen.width / 2) {
           this.stick = {
             center: touch.position.clone(),
+            active: false,
             touch,
           }
         } else if (!this.pan) {
@@ -583,7 +601,7 @@ export class PlayerLocal extends Entity {
 
       // apply move force, projected onto ground normal
       if (this.moving) {
-        let moveSpeed = (this.running ? 8 : 4) * this.mass // run
+        let moveSpeed = (this.running ? 6 : 3) * this.mass // run
         moveSpeed *= 1 - snare
         const slopeRotation = q1.setFromUnitVectors(UP, this.groundNormal)
         const moveForce = v1.copy(this.moveDir).multiplyScalar(moveSpeed * 10).applyQuaternion(slopeRotation) // prettier-ignore
@@ -598,7 +616,8 @@ export class PlayerLocal extends Entity {
       // ground/air jump
       const shouldJump =
         this.grounded && !this.jumping && this.jumpDown && !this.data.effect?.snare && !this.data.effect?.freeze
-      const shouldAirJump = !this.grounded && !this.airJumped && this.jumpPressed && !this.world.builder?.enabled
+      const shouldAirJump =
+        false && !this.grounded && !this.airJumped && this.jumpPressed && !this.world.builder?.enabled // temp: disabled
       if (shouldJump || shouldAirJump) {
         // calc velocity needed to reach jump height
         let jumpVelocity = Math.sqrt(2 * this.effectiveGravity * this.jumpHeight)
@@ -730,6 +749,11 @@ export class PlayerLocal extends Entity {
       this.avatar.visible = true
     }
 
+    // stick movement threshold
+    if (this.stick && !this.stick.active) {
+      this.stick.active = this.stick.center.distanceTo(this.stick.touch.position) > 3
+    }
+
     // watch jump presses to either fly or air-jump
     this.jumpDown = isXR ? this.control.xrRightBtn1.down : this.control.space.down || this.control.touchA.down
     if (isXR ? this.control.xrRightBtn1.pressed : this.control.space.pressed || this.control.touchA.pressed) {
@@ -742,7 +766,7 @@ export class PlayerLocal extends Entity {
       // in xr use controller input
       this.moveDir.x = this.control.xrLeftStick.value.x
       this.moveDir.z = this.control.xrLeftStick.value.z
-    } else if (this.stick) {
+    } else if (this.stick?.active) {
       // if we have a touch joystick use that
       const touchX = this.stick.touch.position.x
       const touchY = this.stick.touch.position.y
@@ -784,7 +808,7 @@ export class PlayerLocal extends Entity {
     }
 
     // determine if we're "running"
-    if (this.stick || isXR) {
+    if (this.stick?.active || isXR) {
       // touch/xr joysticks at full extent
       this.running = this.moving && this.moveDir.length() > 0.9
     } else {
@@ -804,8 +828,8 @@ export class PlayerLocal extends Entity {
       this.flyDir.applyQuaternion(this.cam.quaternion)
     }
 
-    // store un-rotated move direction
-    this.moveDirRaw.copy(this.moveDir)
+    // store un-rotated move direction (axis)
+    this.axis.copy(this.moveDir)
 
     // get un-rotated move direction in degrees
     // Octant ranges (8 directions)
@@ -817,7 +841,7 @@ export class PlayerLocal extends Entity {
     // Backward-Left:   202.5° to 247.5°
     // Left:            247.5° to 292.5°
     // Forward-Left:    292.5° to 337.5°
-    const moveRad = Math.atan2(this.moveDirRaw.x, -this.moveDirRaw.z)
+    const moveRad = Math.atan2(this.axis.x, -this.axis.z)
     let moveDeg = moveRad * RAD2DEG
     if (moveDeg < 0) moveDeg += 360
 
@@ -841,26 +865,10 @@ export class PlayerLocal extends Entity {
     } else {
       rotY = this.cam.rotation.y
     }
-
     if (this.data.effect?.turn) {
-      // effects can force turn
       applyRotY = true
     } else if (this.moving || this.firstPerson) {
-      // diagonals offset faced direction
       applyRotY = true
-      if (moveDeg < 337.5 && moveDeg > 292.5) {
-        // fwd + left
-        rotY += 45 * DEG2RAD
-      } else if (moveDeg > 22.5 && moveDeg < 67.5) {
-        // fwd + right
-        rotY -= 45 * DEG2RAD
-      } else if (moveDeg > 202.5 && moveDeg < 247.5) {
-        // back + left
-        rotY -= 45 * DEG2RAD
-      } else if (moveDeg > 112.5 && moveDeg < 157.5) {
-        // back + right
-        rotY += 45 * DEG2RAD
-      }
     }
 
     // when moving, or in first person or effect.turn, continually slerp to face that angle
@@ -871,38 +879,50 @@ export class PlayerLocal extends Entity {
       this.base.quaternion.slerp(q1, alpha)
     }
 
-    // emote
+    // apply emote
     let emote
     if (this.data.effect?.emote) {
       emote = this.data.effect.emote
-    } else if (this.flying) {
-      emote = Emotes.FLOAT
-    } else if (this.airJumping) {
-      emote = Emotes.FLIP
-    } else if (this.jumping) {
-      emote = Emotes.FLOAT
-    } else if (this.falling) {
-      emote = this.fallDistance > 1.6 ? Emotes.FALL : Emotes.FLOAT
-    } else if (this.moving) {
-      if (moveDeg > 247.5 && moveDeg < 292.5) {
-        emote = this.running ? Emotes.RUN_LEFT : Emotes.WALK_LEFT
-      } else if (moveDeg > 67.5 && moveDeg < 112.5) {
-        emote = this.running ? Emotes.RUN_RIGHT : Emotes.WALK_RIGHT
-      } else if (this.moveDirRaw.z < 0) {
-        emote = this.running ? Emotes.RUN : Emotes.WALK
-      } else if (this.moveDirRaw.z > 0) {
-        emote = this.running ? Emotes.RUN_BACK : Emotes.WALK_BACK
-      }
-    } else if (this.speaking) {
-      emote = Emotes.TALK
     }
-    if (!emote) emote = Emotes.IDLE
-    let emoteChanged
     if (this.emote !== emote) {
       this.emote = emote
-      emoteChanged = true
     }
     this.avatar?.setEmote(this.emote)
+
+    // get locomotion mode
+    let mode
+    if (this.data.effect?.emote) {
+      // emote = this.data.effect.emote
+    } else if (this.flying) {
+      mode = Modes.FLY
+    } else if (this.airJumping) {
+      mode = Modes.FLIP
+    } else if (this.jumping) {
+      mode = Modes.JUMP
+    } else if (this.falling) {
+      mode = this.fallDistance > 1.6 ? Modes.FALL : Modes.JUMP
+    } else if (this.moving) {
+      mode = this.running ? Modes.RUN : Modes.WALK
+    } else if (this.speaking) {
+      mode = Modes.TALK
+    }
+    if (!mode) mode = Modes.IDLE
+    this.mode = mode
+
+    // set gaze direction
+    if (isXR) {
+      this.gaze.copy(FORWARD).applyQuaternion(this.world.xr.camera.quaternion)
+    } else {
+      this.gaze.copy(FORWARD).applyQuaternion(this.cam.quaternion)
+      if (!this.firstPerson) {
+        // tilt slightly up in third person as people look from above
+        v1.copy(gazeTiltAxis).applyQuaternion(this.cam.quaternion) // tilt in cam space
+        this.gaze.applyAxisAngle(v1, gazeTiltAngle) // positive for upward tilt
+      }
+    }
+
+    // apply locomotion
+    this.avatar?.instance?.setLocomotion(this.mode, this.axis, this.gaze)
 
     // send network updates
     this.lastSendAt += delta
@@ -912,6 +932,9 @@ export class PlayerLocal extends Entity {
           id: this.data.id,
           p: this.base.position.clone(),
           q: this.base.quaternion.clone(),
+          m: this.mode,
+          a: this.axis.clone(),
+          g: this.gaze.clone(),
           e: null,
         }
       }
@@ -927,6 +950,21 @@ export class PlayerLocal extends Entity {
       if (!this.lastState.q.equals(this.base.quaternion)) {
         data.q = this.base.quaternion.toArray()
         this.lastState.q.copy(this.base.quaternion)
+        hasChanges = true
+      }
+      if (this.lastState.m !== this.mode) {
+        data.m = this.mode
+        this.lastState.m = this.mode
+        hasChanges = true
+      }
+      if (!this.lastState.a.equals(this.axis)) {
+        data.a = this.axis.toArray()
+        this.lastState.a.copy(this.axis)
+        hasChanges = true
+      }
+      if (!this.lastState.g.equals(this.gaze)) {
+        data.g = this.gaze.toArray()
+        this.lastState.g.copy(this.gaze)
         hasChanges = true
       }
       if (this.lastState.e !== this.emote) {
