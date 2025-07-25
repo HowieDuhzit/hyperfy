@@ -125,7 +125,9 @@ let spawn
             if (dev) {
               // (re)start server
               spawn?.kill('SIGTERM')
-              spawn = fork(path.join(rootDir, 'build/index.js'))
+              spawn = fork(path.join(rootDir, 'build/index.js'), [], {
+                execArgv: ['--max-old-space-size=8192']
+              })
             } else {
               process.exit(0)
             }

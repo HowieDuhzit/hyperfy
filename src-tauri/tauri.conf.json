@@ -1,0 +1,58 @@
+{  
+  "$schema": "../node_modules/@tauri-apps/cli/schema.json",  
+  "build": {  
+    "beforeBuildCommand": "npm run build && npm run tauri:build-resources",  
+    "beforeDevCommand": "npm run dev",  
+    "devPath": "http://localhost:3000",  
+    "distDir": "../build/public"  
+  },  
+  "package": {  
+    "productName": "Hyperfy",  
+    "version": "0.14.0"  
+  },  
+  "tauri": {  
+    "allowlist": {  
+      "all": false,  
+      "shell": {  
+        "all": false,  
+        "open": true,  
+        "sidecar": true,  
+        "scope": [  
+          {  
+            "name": "node",  
+            "sidecar": true  
+          }  
+        ]  
+      }  
+    },  
+    "bundle": {  
+      "active": true,  
+      "category": "DeveloperTool",  
+      "copyright": "",  
+      "externalBin": ["binaries/node"],  
+      "icon": [  
+        "icons/32x32.png",  
+        "icons/128x128.png",  
+        "icons/128x128@2x.png",  
+        "icons/icon.icns",  
+        "icons/icon.ico"  
+      ],  
+      "identifier": "io.hyperfy.app",  
+      "longDescription": "",  
+      "shortDescription": "",  
+      "targets": "all"  
+    },  
+    "security": {  
+      "csp": null  
+    },  
+    "windows": [  
+      {  
+        "fullscreen": true,  
+        "height": 600,  
+        "resizable": true,  
+        "title": "Hyperfy",  
+        "width": 800  
+      }  
+    ]  
+  }  
+}
