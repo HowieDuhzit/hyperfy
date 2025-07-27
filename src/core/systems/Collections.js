@@ -10,6 +10,10 @@ export class Collections extends System {
     return this.collections.find(coll => coll.id === id)
   }
 
+  getAll() {
+    return this.collections
+  }
+
   deserialize(data) {
     this.collections = data
   }

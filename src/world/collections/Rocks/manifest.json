@@ -1,0 +1,29 @@
+{
+  "name": "Rocks",
+  "description": "Rocks",
+  "apps": [
+    "Pebble Round 1.hyp",
+    "Pebble Round 2.hyp",
+    "Pebble Round 3.hyp",
+    "Pebble Round 4.hyp",
+    "Pebble Round 5.hyp",
+    "Pebble Square 1.hyp",
+    "Pebble Square 2.hyp",
+    "Pebble Square 3.hyp",
+    "Pebble Square 4.hyp",
+    "Pebble Square 5.hyp",
+    "Rock Medium 1.hyp",
+    "Rock Medium 2.hyp",
+    "Rock Medium 3.hyp",
+    "RockPath Round Small 1.hyp",
+    "RockPath Round Small 2.hyp",
+    "RockPath Round Small 3.hyp",
+    "RockPath Round Thin.hyp",
+    "RockPath Round Wide.hyp",
+    "RockPath Square Small 1.hyp",
+    "RockPath Square Small 2.hyp",
+    "RockPath Square Small 3.hyp",
+    "RockPath Square Thin.hyp",
+    "RockPath Square Wide.hyp"
+  ]
+}

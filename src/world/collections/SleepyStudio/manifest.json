@@ -1,0 +1,8 @@
+{
+  "name": "Sleepy",
+  "description": "Sleepy Studio Apps",
+  "apps": [
+    "Scatter.hyp",
+    "Particle System.hyp"
+  ]
+}

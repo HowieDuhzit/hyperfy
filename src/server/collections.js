@@ -35,7 +35,14 @@ export async function initCollections({ collectionsDir, assetsDir }) {
         const arrayBuffer = await file.arrayBuffer()
         await fs.writeFile(assetPath, Buffer.from(arrayBuffer))
       }
-      blueprints.push(app.blueprint)
+      
+      // Ensure unique blueprint ID by prefixing with collection name
+      const blueprint = { ...app.blueprint }
+      if (blueprint.id) {
+        blueprint.id = `${folderName}_${blueprint.id}`
+      }
+      
+      blueprints.push(blueprint)
     }
     collections.push({
       id: folderName,
