@@ -73,6 +73,7 @@
     "postprocessing": "^6.36.4",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
+    "realism-effects": "^1.1.2",
     "ses": "^1.10.0",
     "source-map-support": "^0.5.21",
     "three": "^0.173.0",
