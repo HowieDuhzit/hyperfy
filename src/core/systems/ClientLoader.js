@@ -159,6 +159,7 @@ export class ClientLoader extends System {
           const img = new Image()
           img.onload = () => {
             const texture = this.texLoader.load(img.src)
+            texture.colorSpace = THREE.SRGBColorSpace
             this.results.set(key, texture)
             resolve(texture)
             URL.revokeObjectURL(img.src)
@@ -199,6 +200,11 @@ export class ClientLoader extends System {
       if (type === 'avatar') {
         const buffer = await file.arrayBuffer()
         const glb = await this.gltfLoader.parseAsync(buffer)
+        try {
+          const springManager = glb.userData.vrm?.springBoneManager
+          const jointCount = springManager?.joints?.size ?? 0
+          console.log('[avatar] spring manager:', !!springManager, 'joints:', jointCount)
+        } catch (_) { }
         const factory = createVRMFactory(glb, this.world.setupMaterial)
         const hooks = this.vrmHooks
         const node = createNode('group', { id: '$root' })
