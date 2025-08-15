@@ -6,7 +6,7 @@ import { fileURLToPath } from 'url'
 process.env.NODE_ENV = process.env.NODE_ENV || 'production'
 process.env.PORT = process.env.PORT || '3000'
 process.env.WORLD = process.env.WORLD || 'world'
-process.env.PUBLIC_ASSETS_URL = process.env.PUBLIC_ASSETS_URL || ''
+process.env.PUBLIC_ASSETS_URL = process.env.ASSETS_BASE_URL || process.env.PUBLIC_ASSETS_URL || ''
 
 // support node source maps
 sourceMapSupport.install()
