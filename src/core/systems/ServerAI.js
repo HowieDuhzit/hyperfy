@@ -178,10 +178,19 @@ export class ServerAI extends System {
 
 class OpenAIClient {
   constructor(apiKey, model, effort) {
-    this.client = new OpenAI({ apiKey })
+    const config = { apiKey }
+    
+    // Check for custom base URL override
+    const baseURL = process.env.OPENAI_BASE_URL
+    if (baseURL) {
+      config.baseURL = baseURL
+    }
+    
+    this.client = new OpenAI(config)
     this.model = model
     this.effort = effort
   }
+
 
   async create(prompt) {
     const resp = await this.client.responses.create({
