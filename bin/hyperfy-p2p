@@ -1,0 +1,399 @@
+#!/usr/bin/env node
+
+/**
+ * Hyperfy P2P CLI - Simple commands for P2P deployment
+ * 
+ * Usage: npx hyperfy-p2p <command>
+ */
+
+import { promises as fs } from 'fs'
+import { spawn, exec } from 'child_process'
+import path from 'path'
+import { fileURLToPath } from 'url'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const rootDir = path.join(__dirname, '..')
+
+class HyperfyP2PCLI {
+  constructor() {
+    this.services = new Map()
+  }
+
+  log(message, type = 'info') {
+    const colors = {
+      info: '\x1b[36m',    // cyan
+      success: '\x1b[32m', // green
+      warning: '\x1b[33m', // yellow
+      error: '\x1b[31m',   // red
+      reset: '\x1b[0m'
+    }
+    
+    const icon = {
+      info: '🔵',
+      success: '✅',
+      warning: '⚠️ ',
+      error: '❌'
+    }
+
+    console.log(`${colors[type]}${icon[type]} ${message}${colors.reset}`)
+  }
+
+  async runCommand(command, cwd = rootDir) {
+    return new Promise((resolve, reject) => {
+      exec(command, { cwd }, (error, stdout, stderr) => {
+        if (error) {
+          reject(error)
+        } else {
+          resolve(stdout.trim())
+        }
+      })
+    })
+  }
+
+  async spawnProcess(command, args, cwd = rootDir) {
+    const child = spawn(command, args, { 
+      cwd,
+      stdio: 'inherit',
+      detached: false
+    })
+    
+    return new Promise((resolve, reject) => {
+      child.on('close', (code) => {
+        if (code === 0) {
+          resolve()
+        } else {
+          reject(new Error(`Process exited with code ${code}`))
+        }
+      })
+      
+      child.on('error', reject)
+    })
+  }
+
+  async checkDependencies() {
+    try {
+      // Check Node.js version
+      const nodeVersion = await this.runCommand('node --version')
+      const majorVersion = parseInt(nodeVersion.substring(1).split('.')[0])
+      
+      if (majorVersion < 18) {
+        throw new Error(`Node.js 18+ required, found ${nodeVersion}`)
+      }
+      
+      // Check if npm packages are installed
+      try {
+        await fs.access(path.join(rootDir, 'node_modules'))
+      } catch {
+        this.log('Installing dependencies...', 'info')
+        await this.runCommand('npm install')
+      }
+      
+      this.log(`Dependencies OK (Node.js ${nodeVersion})`, 'success')
+      
+    } catch (error) {
+      this.log(`Dependency check failed: ${error.message}`, 'error')
+      throw error
+    }
+  }
+
+  async setupP2P() {
+    this.log('🚀 Setting up P2P environment...', 'info')
+    
+    // Ensure .env exists
+    const envPath = path.join(rootDir, '.env')
+    try {
+      await fs.access(envPath)
+    } catch {
+      this.log('Creating .env file...', 'info')
+      const envExample = await fs.readFile(path.join(rootDir, '.env.example'), 'utf-8')
+      await fs.writeFile(envPath, envExample)
+    }
+    
+    // Enable P2P in .env
+    let envContent = await fs.readFile(envPath, 'utf-8')
+    
+    // Remove existing P2P settings
+    envContent = envContent.replace(/^HYPERFY_STORAGE_TYPE=.*$/m, '')
+    envContent = envContent.replace(/^HYPERFY_ASSETS_TYPE=.*$/m, '')
+    
+    // Add P2P settings
+    envContent += '\n# P2P Configuration\n'
+    envContent += 'HYPERFY_STORAGE_TYPE=hyperdrive\n'
+    envContent += 'HYPERFY_ASSETS_TYPE=hyperdrive\n'
+    
+    await fs.writeFile(envPath, envContent.trim() + '\n')
+    
+    this.log('P2P environment configured', 'success')
+  }
+
+  async validateP2P() {
+    this.log('🧪 Validating P2P system...', 'info')
+    
+    try {
+      await this.runCommand('npm run test:p2p-simple')
+      this.log('P2P system validation passed', 'success')
+    } catch (error) {
+      this.log('P2P system validation failed', 'error')
+      throw error
+    }
+  }
+
+  async startBridge() {
+    this.log('🌉 Starting P2P bridge service...', 'info')
+    
+    const child = spawn('npm', ['run', 'bridge'], {
+      cwd: rootDir,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      detached: true
+    })
+    
+    this.services.set('bridge', child.pid)
+    
+    // Wait for bridge to start
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('Bridge startup timeout'))
+      }, 10000)
+      
+      child.stdout.on('data', (data) => {
+        const output = data.toString()
+        if (output.includes('listening on')) {
+          clearTimeout(timeout)
+          this.log('Bridge service started on ws://localhost:3001', 'success')
+          resolve()
+        }
+      })
+      
+      child.stderr.on('data', (data) => {
+        const error = data.toString()
+        if (error.includes('Error')) {
+          clearTimeout(timeout)
+          reject(new Error(error))
+        }
+      })
+      
+      child.on('exit', (code) => {
+        if (code !== 0) {
+          clearTimeout(timeout)
+          reject(new Error(`Bridge exited with code ${code}`))
+        }
+      })
+    })
+  }
+
+  async startServer(dev = true) {
+    const command = dev ? 'dev' : 'start'
+    this.log(`🖥️  Starting Hyperfy server (${dev ? 'development' : 'production'})...`, 'info')
+    
+    if (!dev) {
+      this.log('Building for production...', 'info')
+      await this.runCommand('npm run build')
+    }
+    
+    const child = spawn('npm', ['run', command], {
+      cwd: rootDir,
+      stdio: 'inherit'
+    })
+    
+    this.services.set('server', child.pid)
+    
+    // Handle process cleanup
+    process.on('SIGINT', () => {
+      this.log('Shutting down services...', 'info')
+      child.kill('SIGTERM')
+      process.exit(0)
+    })
+    
+    return new Promise((resolve, reject) => {
+      child.on('exit', (code) => {
+        this.services.delete('server')
+        if (code === 0) {
+          resolve()
+        } else {
+          reject(new Error(`Server exited with code ${code}`))
+        }
+      })
+    })
+  }
+
+  async enableClientP2P() {
+    this.log('🌐 Client P2P setup instructions:', 'info')
+    console.log('')
+    console.log('Open your browser to: http://localhost:3000')
+    console.log('Then run in browser console:')
+    console.log('')
+    console.log("localStorage.setItem('hyperfy_use_loader_v2', 'true')")
+    console.log("localStorage.setItem('hyperfy_assets_type', 'hyperdrive')")
+    console.log('location.reload()')
+    console.log('')
+    this.log('Client will now use P2P for asset loading!', 'success')
+  }
+
+  async showStatus() {
+    this.log('📊 Hyperfy P2P Status', 'info')
+    console.log('')
+    
+    // Check .env configuration
+    try {
+      const envContent = await fs.readFile(path.join(rootDir, '.env'), 'utf-8')
+      const p2pStorage = envContent.includes('HYPERFY_STORAGE_TYPE=hyperdrive')
+      const p2pAssets = envContent.includes('HYPERFY_ASSETS_TYPE=hyperdrive')
+      
+      console.log('Configuration:')
+      console.log(`  P2P Storage: ${p2pStorage ? '✅ Enabled' : '❌ Disabled'}`)
+      console.log(`  P2P Assets:  ${p2pAssets ? '✅ Enabled' : '❌ Disabled'}`)
+      console.log('')
+      
+    } catch {
+      console.log('Configuration: ❌ .env file not found')
+      console.log('')
+    }
+    
+    // Check services
+    console.log('Services:')
+    console.log(`  Bridge:      ${this.services.has('bridge') ? '✅ Running' : '❌ Stopped'}`)
+    console.log(`  Server:      ${this.services.has('server') ? '✅ Running' : '❌ Stopped'}`)
+    console.log('')
+    
+    // Show data directories
+    const worldDir = path.join(rootDir, 'world')
+    try {
+      const stats = await fs.stat(worldDir)
+      console.log(`Data Directory: ${worldDir}`)
+      console.log(`  Created: ${stats.birthtime.toLocaleString()}`)
+      
+      try {
+        const hyperdriveDir = path.join(worldDir, 'hyperdrive')
+        await fs.access(hyperdriveDir)
+        console.log('  P2P Data: ✅ Present')
+      } catch {
+        console.log('  P2P Data: ❌ Not found')
+      }
+      
+    } catch {
+      console.log('Data Directory: ❌ Not found')
+    }
+  }
+
+  showHelp() {
+    console.log(`
+🌍 Hyperfy P2P CLI - Simple P2P Virtual Worlds
+
+QUICK COMMANDS:
+  npx hyperfy-p2p init       Setup P2P environment
+  npx hyperfy-p2p start      Start P2P services (bridge + server)  
+  npx hyperfy-p2p dev        Start development mode
+  npx hyperfy-p2p test       Validate P2P system
+
+INDIVIDUAL COMMANDS:
+  npx hyperfy-p2p setup      Configure P2P environment
+  npx hyperfy-p2p validate   Test P2P components
+  npx hyperfy-p2p bridge     Start bridge service only
+  npx hyperfy-p2p server     Start server only
+  npx hyperfy-p2p client     Show client P2P setup instructions
+  npx hyperfy-p2p status     Show system status
+
+EXAMPLES:
+  # Complete P2P setup (one command)
+  npx hyperfy-p2p init && npx hyperfy-p2p start
+
+  # Development workflow
+  npx hyperfy-p2p dev
+
+  # Production deployment  
+  npx hyperfy-p2p setup && npx hyperfy-p2p start
+
+For more info: https://github.com/hyperfy-xyz/hyperfy
+`)
+  }
+
+  async run() {
+    const command = process.argv[2]
+    
+    if (!command || command === 'help' || command === '--help' || command === '-h') {
+      this.showHelp()
+      return
+    }
+    
+    try {
+      switch (command) {
+        case 'init':
+          await this.checkDependencies()
+          await this.setupP2P()
+          await this.validateP2P()
+          this.log('🎉 P2P initialization complete!', 'success')
+          console.log('\nNext: npx hyperfy-p2p start')
+          break
+          
+        case 'start':
+          await this.checkDependencies()
+          await this.startBridge()
+          this.log('Bridge running in background. Starting server...', 'info')
+          await this.startServer(false)
+          break
+          
+        case 'dev':
+          await this.checkDependencies()
+          await this.startBridge()
+          this.log('Bridge running in background. Starting dev server...', 'info')
+          await this.startServer(true)
+          break
+          
+        case 'setup':
+          await this.checkDependencies()
+          await this.setupP2P()
+          break
+          
+        case 'validate':
+        case 'test':
+          await this.checkDependencies()
+          await this.validateP2P()
+          break
+          
+        case 'bridge':
+          await this.checkDependencies()
+          await this.spawnProcess('npm', ['run', 'bridge'])
+          break
+          
+        case 'server':
+          await this.checkDependencies()
+          await this.spawnProcess('npm', ['run', 'start'])
+          break
+          
+        case 'client':
+          this.enableClientP2P()
+          break
+          
+        case 'status':
+          await this.showStatus()
+          break
+          
+        default:
+          this.log(`Unknown command: ${command}`, 'error')
+          this.showHelp()
+          process.exit(1)
+      }
+      
+    } catch (error) {
+      this.log(`Error: ${error.message}`, 'error')
+      process.exit(1)
+    }
+  }
+}
+
+// Handle cleanup on exit
+process.on('SIGINT', () => {
+  console.log('\nShutting down...')
+  process.exit(0)
+})
+
+process.on('SIGTERM', () => {
+  process.exit(0)
+})
+
+// Run CLI
+const cli = new HyperfyP2PCLI()
+cli.run().catch(error => {
+  console.error('CLI Error:', error.message)
+  process.exit(1)
+})

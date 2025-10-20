@@ -30,6 +30,9 @@
       "assets": "http://localhost:3000/assets"
     }
   },
+  "bin": {
+    "hyperfy-p2p": "./bin/hyperfy-p2p"
+  },
   "scripts": {
     "dev": "node scripts/build.mjs --dev",
     "build": "node scripts/build.mjs",
@@ -51,7 +54,14 @@
     "test:p2p-assets": "node test-p2p-client-assets.js",
     "test:p2p-integration": "node test-p2p-integration.js",
     "test:p2p-simple": "node test-p2p-simple.js",
-    "demo:p2p-production": "node demo-p2p-production.js"
+    "demo:p2p-production": "node demo-p2p-production.js",
+    "p2p:init": "node bin/hyperfy-p2p init",
+    "p2p:start": "node bin/hyperfy-p2p start",
+    "p2p:dev": "node bin/hyperfy-p2p dev",
+    "p2p:test": "node bin/hyperfy-p2p test",
+    "p2p:status": "node bin/hyperfy-p2p status",
+    "p2p:bridge": "node bin/hyperfy-p2p bridge",
+    "p2p:client": "node bin/hyperfy-p2p client"
   },
   "dependencies": {
     "@fastify/compress": "^8.0.1",
