@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <title>Hyperfy - Pear App</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <link rel="preload" href="build/public/rubik.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" type="text/css" href="build/public/index.css" />
+    <style>
+      /* Full screen for desktop app */
+      body, html {
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        background: #000;
+        width: 100vw;
+        height: 100vh;
+      }
+      #root {
+        width: 100%;
+        height: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <!-- Load PhysX before the main app -->
+    <script src="build/public/physx-js-webidl.js"></script>
+    <!-- Set manual boot flag to prevent auto-booting in boot.js -->
+    <script>
+      globalThis.hyperfy_manual_boot = true;
+    </script>
+    <script type="module">
+      // Import the boot function and manually call it with Pear config
+      import { bootFromPear } from './build/public/boot-6EPLWM3T.js';
+      bootFromPear();
+    </script>
+  </body>
+</html>

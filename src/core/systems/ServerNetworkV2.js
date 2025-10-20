@@ -1,0 +1,522 @@
+import moment from 'moment'
+import { writePacket } from '../packets.js'
+import { Socket } from '../Socket.js'
+import { addRole, hasRole, removeRole, serializeRoles, uuid } from '../utils.js'
+import { System } from './System.js'
+import { createJWT, readJWT } from '../utils-server.js'
+import { cloneDeep } from 'lodash-es'
+import * as THREE from '../extras/three.js'
+
+const SAVE_INTERVAL = parseInt(process.env.SAVE_INTERVAL || '60') // seconds
+const PING_RATE = 1 // seconds
+const defaultSpawn = '{ "position": [0, 0, 0], "quaternion": [0, 0, 0, 1] }'
+
+const HEALTH_MAX = 100
+
+/**
+ * Server Network System V2
+ *
+ * - runs on the server
+ * - provides abstract network methods matching ClientNetwork
+ * - uses Storage abstraction for both file-based and P2P storage
+ *
+ */
+export class ServerNetworkV2 extends System {
+  constructor(world) {
+    super(world)
+    this.id = 0
+    this.ids = -1
+    this.sockets = new Map()
+    this.socketIntervalId = setInterval(() => this.checkSockets(), PING_RATE * 1000)
+    this.saveTimerId = null
+    this.dirtyBlueprints = new Set()
+    this.dirtyApps = new Set()
+    this.isServer = true
+    this.queue = []
+  }
+
+  init({ db, storage }) {
+    this.db = db
+    this.storage = storage
+    
+    // Listen for storage events for P2P sync
+    if (this.storage && typeof this.storage.on === 'function') {
+      this.storage.on('storage:change', (event) => {
+        this.onStorageChange(event)
+      })
+      
+      this.storage.on('storage:peer:join', (peer) => {
+        console.log('ServerNetworkV2: Storage peer joined')
+      })
+      
+      this.storage.on('storage:peer:leave', (peer) => {
+        console.log('ServerNetworkV2: Storage peer left')
+      })
+    }
+  }
+
+  /**
+   * Handle remote storage changes (for P2P storage)
+   */
+  onStorageChange(event) {
+    const { key, value, oldValue } = event
+    
+    // Parse storage keys to determine what changed
+    if (key.startsWith('blueprint:')) {
+      const blueprintId = key.substring('blueprint:'.length)
+      if (value && !this.world.blueprints.get(blueprintId)) {
+        // New blueprint from peer
+        this.world.blueprints.add(value, true)
+        this.send('blueprintAdded', value)
+      } else if (!value && this.world.blueprints.get(blueprintId)) {
+        // Blueprint removed from peer
+        this.world.blueprints.remove(blueprintId)
+        this.send('blueprintRemoved', blueprintId)
+      }
+    } else if (key.startsWith('entity:')) {
+      const entityId = key.substring('entity:'.length)
+      if (value && !this.world.entities.get(entityId)) {
+        // New entity from peer
+        this.world.entities.add(value, true)
+        this.send('entityAdded', value)
+      } else if (!value && this.world.entities.get(entityId)) {
+        // Entity removed from peer
+        this.world.entities.remove(entityId)
+        this.send('entityRemoved', entityId)
+      }
+    }
+  }
+
+  async start() {
+    // get spawn
+    const spawnData = await this.storage.get('config:spawn')
+    this.spawn = JSON.parse(spawnData || defaultSpawn)
+    
+    // hydrate blueprints from storage
+    const blueprintEntries = await this.storage.entries('blueprint:')
+    for (const [key, blueprint] of Object.entries(blueprintEntries)) {
+      this.world.blueprints.add(blueprint, true)
+    }
+    
+    // hydrate entities from storage
+    const entityEntries = await this.storage.entries('entity:')
+    for (const [key, entity] of Object.entries(entityEntries)) {
+      entity.state = {}
+      this.world.entities.add(entity, true)
+    }
+    
+    console.log(`ServerNetworkV2: Loaded ${Object.keys(blueprintEntries).length} blueprints and ${Object.keys(entityEntries).length} entities from storage`)
+    
+    // queue first save
+    if (SAVE_INTERVAL) {
+      this.saveTimerId = setTimeout(this.save, SAVE_INTERVAL * 1000)
+    }
+  }
+
+  preFixedUpdate() {
+    this.flush()
+  }
+
+  send(name, data, ignoreSocketId) {
+    // console.log('->>>', name, data)
+    const packet = writePacket(name, data)
+    this.sockets.forEach(socket => {
+      if (socket.id === ignoreSocketId) return
+      socket.sendPacket(packet)
+    })
+  }
+
+  sendTo(socketId, name, data) {
+    const socket = this.sockets.get(socketId)
+    socket?.send(name, data)
+  }
+
+  checkSockets() {
+    // see: https://www.npmjs.com/package/ws#how-to-detect-and-close-broken-connections
+    const dead = []
+    this.sockets.forEach(socket => {
+      if (!socket.alive) {
+        dead.push(socket)
+      } else {
+        socket.ping()
+      }
+    })
+    dead.forEach(socket => socket.disconnect())
+  }
+
+  enqueue(socket, method, data) {
+    this.queue.push([socket, method, data])
+  }
+
+  flush() {
+    while (this.queue.length) {
+      try {
+        const [socket, method, data] = this.queue.shift()
+        this[method]?.(socket, data)
+      } catch (err) {
+        console.error(err)
+      }
+    }
+  }
+
+  getTime() {
+    return performance.now() / 1000 // seconds
+  }
+
+  save = async () => {
+    const counts = {
+      upsertedBlueprints: 0,
+      upsertedApps: 0,
+      deletedApps: 0,
+    }
+    
+    // save blueprints to storage
+    for (const id of this.dirtyBlueprints) {
+      const blueprint = this.world.blueprints.get(id)
+      try {
+        await this.storage.set(`blueprint:${blueprint.id}`, blueprint)
+        counts.upsertedBlueprints++
+        this.dirtyBlueprints.delete(id)
+      } catch (err) {
+        console.log(`error saving blueprint: ${blueprint.id}`)
+        console.error(err)
+      }
+    }
+    
+    // save app entities to storage
+    for (const id of this.dirtyApps) {
+      const entity = this.world.entities.get(id)
+      if (entity) {
+        // it needs creating/updating
+        if (entity.data.uploader || entity.data.mover) {
+          continue // ignore while uploading or moving
+        }
+        try {
+          const data = cloneDeep(entity.data)
+          data.state = null
+          await this.storage.set(`entity:${entity.data.id}`, data)
+          counts.upsertedApps++
+          this.dirtyApps.delete(id)
+        } catch (err) {
+          console.log(`error saving entity: ${entity.data.id}`)
+          console.error(err)
+        }
+      } else {
+        // it was removed
+        try {
+          await this.storage.delete(`entity:${id}`)
+          counts.deletedApps++
+          this.dirtyApps.delete(id)
+        } catch (err) {
+          console.log(`error removing entity: ${id}`)
+          console.error(err)
+        }
+      }
+    }
+    
+    // log
+    const didSave = counts.upsertedBlueprints > 0 || counts.upsertedApps > 0 || counts.deletedApps > 0
+    if (didSave) {
+      console.log(
+        `world saved (${counts.upsertedBlueprints} blueprints, ${counts.upsertedApps} apps, ${counts.deletedApps} apps removed)`
+      )
+    }
+    
+    // queue again
+    this.saveTimerId = setTimeout(this.save, SAVE_INTERVAL * 1000)
+  }
+
+  async onConnection(ws, authToken) {
+    try {
+      // get or create user
+      let user
+      if (authToken) {
+        try {
+          const { userId } = await readJWT(authToken)
+          user = await this.db('users').where('id', userId).first()
+        } catch (err) {
+          console.error('failed to read authToken:', authToken)
+        }
+      }
+      if (!user) {
+        user = {
+          id: uuid(),
+          name: 'Anonymous',
+          avatar: null,
+          roles: '',
+          createdAt: moment().toISOString(),
+        }
+        await this.db('users').insert(user)
+        authToken = await createJWT({ userId: user.id })
+      }
+      user.roles = user.roles.split(',')
+
+      // disconnect if user already in this world
+      if (this.sockets.has(user.id)) {
+        const packet = writePacket('kick', 'duplicate_user')
+        ws.send(packet)
+        ws.disconnect()
+        return
+      }
+
+      // if there is no admin code, everyone is a temporary admin (eg for local dev)
+      // all roles prefixed with `~` are temporary and not persisted to db
+      if (!process.env.ADMIN_CODE) {
+        user.roles.push('~admin')
+      }
+
+      // create socket
+      const socket = new Socket({ id: user.id, ws, network: this })
+
+      // spawn player
+      socket.player = this.world.entities.add(
+        {
+          id: user.id,
+          type: 'player',
+          position: this.spawn.position.slice(),
+          quaternion: this.spawn.quaternion.slice(),
+          owner: socket.id, // deprecated, same as userId
+          userId: user.id, // deprecated, same as userId
+          name: user.name,
+          health: HEALTH_MAX,
+          avatar: user.avatar,
+          roles: user.roles,
+        },
+        true
+      )
+
+      // send snapshot
+      socket.send('snapshot', {
+        id: socket.id,
+        serverTime: performance.now(),
+        assetsUrl: process.env.PUBLIC_ASSETS_URL,
+        apiUrl: process.env.PUBLIC_API_URL,
+        maxUploadSize: process.env.PUBLIC_MAX_UPLOAD_SIZE,
+        chat: this.world.chat.serialize(),
+        blueprints: this.world.blueprints.serialize(),
+        entities: this.world.entities.serialize(),
+        authToken,
+      })
+
+      this.sockets.set(socket.id, socket)
+
+      // enter events on the server are sent after the snapshot.
+      // on the client these are sent during PlayerRemote.js entity instantiation!
+      this.world.events.emit('enter', { playerId: socket.player.data.id })
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  onChatAdded = async (socket, msg) => {
+    // TODO: check for spoofed messages, permissions/roles etc
+    // handle slash commands
+    if (msg.body.startsWith('/')) {
+      const [cmd, arg1, arg2] = msg.body.slice(1).split(' ')
+      // become admin command
+      if (cmd === 'admin') {
+        const code = arg1
+        if (code !== process.env.ADMIN_CODE || !process.env.ADMIN_CODE) return
+        const player = socket.player
+        const id = player.data.id
+        const userId = player.data.userId
+        const roles = player.data.roles
+        const granting = !hasRole(roles, 'admin')
+        if (granting) {
+          addRole(roles, 'admin')
+        } else {
+          removeRole(roles, 'admin')
+        }
+        player.modify({ roles })
+        this.send('entityModified', { id, roles })
+        socket.send('chatAdded', {
+          id: uuid(),
+          from: null,
+          fromId: null,
+          body: granting ? 'Admin granted!' : 'Admin revoked!',
+          createdAt: moment().toISOString(),
+        })
+        await this.db('users')
+          .where('id', userId)
+          .update({ roles: serializeRoles(roles) })
+      }
+      if (cmd === 'name') {
+        const name = arg1
+        if (!name) return
+        const player = socket.player
+        const id = player.data.id
+        const userId = player.data.userId
+        player.data.name = name
+        player.modify({ name })
+        this.send('entityModified', { id, name })
+        socket.send('chatAdded', {
+          id: uuid(),
+          from: null,
+          fromId: null,
+          body: `Name set to ${name}!`,
+          createdAt: moment().toISOString(),
+        })
+        await this.db('users').where('id', userId).update({ name })
+      }
+      if (cmd === 'spawn') {
+        const player = socket.player
+        const roles = player.data.roles
+        if (!hasRole(roles, 'admin')) return
+        const action = arg1
+        if (action === 'set') {
+          this.spawn = { position: player.data.position.slice(), quaternion: player.data.quaternion.slice() }
+        } else if (action === 'clear') {
+          this.spawn = { position: [0, 0, 0], quaternion: [0, 0, 0, 1] }
+        } else {
+          return
+        }
+        const data = JSON.stringify(this.spawn)
+        await this.storage.set('config:spawn', data)
+      }
+      if (cmd === 'chat') {
+        const code = arg1
+        if (code !== 'clear') return
+        const player = socket.player
+        if (!hasRole(player.data.roles, 'admin')) {
+          return
+        }
+        this.world.chat.clear(true)
+        return
+      }
+      return
+    }
+    // handle chat messages
+    this.world.chat.add(msg, false)
+    this.send('chatAdded', msg, socket.id)
+  }
+
+  onBlueprintAdded = (socket, blueprint) => {
+    this.world.blueprints.add(blueprint)
+    this.send('blueprintAdded', blueprint, socket.id)
+    this.dirtyBlueprints.add(blueprint.id)
+  }
+
+  onBlueprintModified = (socket, data) => {
+    const blueprint = this.world.blueprints.get(data.id)
+    // if new version is greater than current version, allow it
+    if (data.version > blueprint.version) {
+      this.world.blueprints.modify(data)
+      this.send('blueprintModified', data, socket.id)
+      this.dirtyBlueprints.add(data.id)
+    }
+    // otherwise, send a revert back to client, because someone else modified before them
+    else {
+      socket.send('blueprintModified', blueprint)
+    }
+  }
+
+  onEntityAdded = (socket, data) => {
+    // TODO: check client permission
+    const entity = this.world.entities.add(data)
+    this.send('entityAdded', data, socket.id)
+    if (entity.isApp) this.dirtyApps.add(entity.data.id)
+  }
+
+  onEntityModified = async (socket, data) => {
+    // TODO: check client permission
+    const entity = this.world.entities.get(data.id)
+    if (!entity) return console.error('onEntityModified: no entity found', data)
+    entity.modify(data)
+    this.send('entityModified', data, socket.id)
+    if (entity.isApp) {
+      // mark for saving
+      this.dirtyApps.add(entity.data.id)
+    }
+    if (entity.isPlayer) {
+      // persist player name and avatar changes
+      const changes = {}
+      let changed
+      if (data.hasOwnProperty('name')) {
+        changes.name = data.name
+        changed = true
+      }
+      if (data.hasOwnProperty('avatar')) {
+        changes.avatar = data.avatar
+        changed = true
+      }
+      if (changed) {
+        await this.db('users').where('id', entity.data.userId).update(changes)
+      }
+    }
+  }
+
+  onEntityEvent = (socket, event) => {
+    const [id, version, name, data] = event
+    const entity = this.world.entities.get(id)
+    entity?.onEvent(version, name, data, socket.id)
+  }
+
+  onEntityRemoved = (socket, id) => {
+    // TODO: check client permission
+    const entity = this.world.entities.get(id)
+    this.world.entities.remove(id)
+    this.send('entityRemoved', id, socket.id)
+    if (entity.isApp) this.dirtyApps.add(id)
+  }
+
+  onPlayerTeleport = (socket, data) => {
+    this.sendTo(data.networkId, 'playerTeleport', data)
+  }
+
+  onPlayerPush = (socket, data) => {
+    this.sendTo(data.networkId, 'playerPush', data)
+  }
+
+  onPlayerSessionAvatar = (socket, data) => {
+    this.sendTo(data.networkId, 'playerSessionAvatar', data.avatar)
+  }
+
+  onSendTo = (socket, data) => {
+    this.sendTo(data.playerId, data.name, data.data)
+  }
+
+  onDisconnect = (socket, code) => {
+    socket.player.destroy(true)
+    this.sockets.delete(socket.id)
+  }
+
+  onRequestTokenMetadata = async (socket, tokenMint) => {
+    try {
+      console.log(`Received token metadata request for: ${tokenMint} from socket ${socket.id}`)
+
+      // Get the Solana system
+      const solana = this.world.solana
+      if (!solana) {
+        console.error('Solana system not initialized')
+        return
+      }
+
+      // Get token metadata from the server's Solana system
+      const token = await solana.programs.token(tokenMint)
+
+      if (!token) {
+        console.error(`Token metadata not found for: ${tokenMint}`)
+        return
+      }
+
+      // Extract just the metadata properties
+      const metadata = {
+        decimals: token.decimals,
+        supply: token.supply,
+        name: token.name,
+        symbol: token.symbol,
+        uri: token.uri,
+      }
+
+      // Send metadata back to the client
+      this.sendTo(socket.id, 'tokenMetadata', {
+        tokenMint,
+        metadata,
+      })
+
+      console.log(`Sent metadata for token: ${tokenMint} to socket ${socket.id}`)
+    } catch (error) {
+      console.error(`Error processing token metadata request for ${tokenMint}:`, error)
+    }
+  }
+}

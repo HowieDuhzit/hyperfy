@@ -201,9 +201,22 @@ export class World extends EventEmitter {
     if (url.startsWith('blob')) {
       return url
     }
+    if (url.startsWith('hyperdrive://')) {
+      // P2P Hyperdrive URLs pass through unchanged for special handling
+      return url
+    }
     if (url.startsWith('asset://')) {
-      if (!this.assetsUrl) console.error('resolveURL: no assetsUrl defined')
-      return url.replace('asset:/', this.assetsUrl)
+      // Check if we should resolve to hyperdrive or HTTP
+      const useHyperdrive = this.isP2PAssetsEnabled()
+      if (useHyperdrive && this.hyperdriveUrl) {
+        // Convert asset:// to hyperdrive:// URL
+        const assetPath = url.replace('asset://', '')
+        return `hyperdrive://${this.hyperdriveUrl}/${assetPath}`
+      } else {
+        // Traditional HTTP asset resolution
+        if (!this.assetsUrl) console.error('resolveURL: no assetsUrl defined')
+        return url.replace('asset:/', this.assetsUrl)
+      }
     }
     if (url.match(/^https?:\/\//i)) {
       return url
@@ -215,6 +228,26 @@ export class World extends EventEmitter {
       return url
     }
     return `https://${url}`
+  }
+
+  /**
+   * Check if P2P assets are enabled
+   */
+  isP2PAssetsEnabled() {
+    // Check localStorage feature flag
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const assetType = localStorage.getItem('hyperfy_assets_type')
+      if (assetType === 'hyperdrive') {
+        return true
+      }
+    }
+    
+    // Check if environment variables suggest P2P
+    if (typeof process !== 'undefined' && process.env) {
+      return process.env.HYPERFY_ASSETS_TYPE === 'hyperdrive'
+    }
+    
+    return false
   }
 
   destroy() {

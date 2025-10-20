@@ -6,6 +6,7 @@ import { ClientPrefs } from './systems/ClientPrefs'
 import { ClientControls } from './systems/ClientControls'
 import { ClientNetwork } from './systems/ClientNetwork'
 import { ClientLoader } from './systems/ClientLoader'
+import { ClientLoaderV2 } from './systems/ClientLoaderV2'
 import { ClientGraphics } from './systems/ClientGraphics'
 import { ClientEnvironment } from './systems/ClientEnvironment'
 import { ClientAudio } from './systems/ClientAudio'
@@ -26,7 +27,10 @@ export function createClientWorld() {
   world.register('prefs', ClientPrefs)
   world.register('controls', ClientControls)
   world.register('network', ClientNetwork)
-  world.register('loader', ClientLoader)
+  // Use V2 loader for P2P asset support
+  const useV2Loader = typeof window !== 'undefined' && window.localStorage && 
+                      localStorage.getItem('hyperfy_use_loader_v2') === 'true'
+  world.register('loader', useV2Loader ? ClientLoaderV2 : ClientLoader)
   world.register('graphics', ClientGraphics)
   world.register('environment', ClientEnvironment)
   world.register('audio', ClientAudio)
