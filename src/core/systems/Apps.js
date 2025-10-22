@@ -310,9 +310,51 @@ export class Apps extends System {
         }
         world.events.emit(name, data)
       },
-      create(entity, name, data) {
-        const node = entity.createNode(name, data)
-        return node.getProxy()
+      create(entity, nameOrConfig, data) {
+        // Support both patterns:
+        // - app.create('webviewer', data)
+        // - app.create({ type: 'webviewer', parent, ...props })
+        let type
+        let config
+        let parent
+
+        if (typeof nameOrConfig === 'string') {
+          type = nameOrConfig
+          config = data || {}
+        } else if (nameOrConfig && typeof nameOrConfig === 'object') {
+          config = { ...nameOrConfig }
+          type = config.type
+          parent = config.parent
+          delete config.type
+          delete config.parent
+        }
+
+        if (!type) {
+          throw new Error('app.create: missing type')
+        }
+
+        const node = entity.createNode(type, config)
+        const proxy = node.getProxy()
+
+        // Handle parent relationship when using declarative form
+        if (nameOrConfig && typeof nameOrConfig === 'object') {
+          // resolve parent (proxy or raw node)
+          let parentNode
+          if (parent) {
+            try {
+              const ref = getRef(parent)
+              parentNode = ref || null
+            } catch (e) {
+              parentNode = null
+            }
+          }
+          // default parent is the app root
+          if (!parentNode) parentNode = entity.root
+
+          parentNode.add(node)
+        }
+
+        return proxy
       },
       control(entity, options) {
         entity.control?.release()
