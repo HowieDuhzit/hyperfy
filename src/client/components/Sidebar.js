@@ -46,6 +46,7 @@ import {
   FieldTextarea,
   FieldToggle,
   FieldVec3,
+  FieldColor,
 } from './Fields'
 import { HintContext, HintProvider } from './Hint'
 import { useFullscreen } from './useFullscreen'
@@ -720,7 +721,7 @@ function World({ world, hidden }) {
             world={world}
           />
           <FieldFile
-            label='Avatar'
+            label='Default Avatar'
             hint='Change the default avatar everyone spawns into the world with'
             kind='avatar'
             value={avatar}
@@ -1243,7 +1244,8 @@ function AppTransformFields({ app }) {
     <>
       <FieldVec3
         label='Position'
-        dp={1}
+        dp={2}
+        smallStep={0.01}
         step={0.1}
         bigStep={1}
         value={position}
@@ -1259,7 +1261,8 @@ function AppTransformFields({ app }) {
       />
       <FieldVec3
         label='Rotation'
-        dp={1}
+        dp={2}
+        smallStep={0.1}
         step={1}
         bigStep={5}
         value={rotation}
@@ -1275,7 +1278,8 @@ function AppTransformFields({ app }) {
       />
       <FieldVec3
         label='Scale'
-        dp={1}
+        dp={2}
+        smallStep={0.01}
         step={0.1}
         bigStep={1}
         value={scale}
@@ -1471,6 +1475,11 @@ function AppField({ world, props, field, value, modify }) {
   }
   if (field.type === 'button') {
     return <FieldBtn label={field.label} hint={field.hint} onClick={field.onClick} />
+  }
+  if (field.type === 'color') {
+    return (
+      <FieldColor label={field.label} hint={field.hint} value={value} onChange={value => modify(field.key, value)} />
+    )
   }
   return null
 }

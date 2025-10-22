@@ -6,6 +6,7 @@ import { Collections } from './systems/Collections'
 import { Apps } from './systems/Apps'
 import { Anchors } from './systems/Anchors'
 import { Avatars } from './systems/Avatars'
+import { Animation } from './systems/Animation'
 import { Events } from './systems/Events'
 import { Chat } from './systems/Chat'
 import { Blueprints } from './systems/Blueprints'
@@ -40,6 +41,7 @@ export class World extends EventEmitter {
     this.register('apps', Apps)
     this.register('anchors', Anchors)
     this.register('avatars', Avatars)
+    this.register('animation', Animation)
     this.register('events', Events)
     this.register('scripts', Scripts)
     this.register('chat', Chat)
@@ -59,6 +61,7 @@ export class World extends EventEmitter {
   async init(options) {
     this.storage = options.storage
     this.assetsDir = options.assetsDir
+    this.assetsUrl = options.assetsUrl
     for (const system of this.systems) {
       await system.init(options)
     }
